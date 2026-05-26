@@ -1,6 +1,13 @@
 import React, { useState } from 'react';
-import { ShieldCheck, UserPlus, LogIn, Award } from 'lucide-react';
+import { ShieldCheck, UserPlus, LogIn, Award, BarChart2, Check, X } from 'lucide-react';
 import { translate } from '../utils/i18n';
+
+// ─── Speelsterkte Calculator ────────────────────────────────────────────────
+function calcPadelRating(q1, q2, q3, q4) {
+  const raw = q1 * 1.5 + q2 * 2.0 + q3 * 1.25 + q4 * 1.75;
+  const rating = 9.0 - (raw / 10.5) * 8.0;
+  return Math.round(rating * 2) / 2;
+}
 
 export default function LoginScreen({ onLoginSuccess, language, onChangeLanguage }) {
   const [isRegistering, setIsRegistering] = useState(false);
@@ -11,6 +18,12 @@ export default function LoginScreen({ onLoginSuccess, language, onChangeLanguage
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const [showForgotModal, setShowForgotModal] = useState(false);
+  const [showCalc, setShowCalc] = useState(false);
+  const [cq1, setCq1] = useState(-1);
+  const [cq2, setCq2] = useState(-1);
+  const [cq3, setCq3] = useState(-1);
+  const [cq4, setCq4] = useState(-1);
+  const [calcResult, setCalcResult] = useState(null);
 
   const t = (key) => translate(key, language);
 
@@ -168,9 +181,22 @@ export default function LoginScreen({ onLoginSuccess, language, onChangeLanguage
         {isRegistering && (
           <>
             <div>
-              <label style={{ display: 'block', fontSize: '11px', fontWeight: '700', color: 'var(--color-text-muted)', marginBottom: '6px', textTransform: 'uppercase' }}>
-                {t('ratingLabel')}
-              </label>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
+                <label style={{ display: 'block', fontSize: '11px', fontWeight: '700', color: 'var(--color-text-muted)', textTransform: 'uppercase' }}>
+                  {t('ratingLabel')}
+                </label>
+                <button
+                  type="button"
+                  onClick={() => { setShowCalc(true); setCalcResult(null); setCq1(-1); setCq2(-1); setCq3(-1); setCq4(-1); }}
+                  style={{
+                    background: 'none', border: 'none',
+                    color: 'var(--color-primary)', fontSize: '10px',
+                    fontWeight: '700', cursor: 'pointer', textDecoration: 'underline'
+                  }}
+                >
+                  {t('calculateRatingLink')}
+                </button>
+              </div>
               <select
                 className="input-field"
                 value={level}
@@ -267,17 +293,10 @@ export default function LoginScreen({ onLoginSuccess, language, onChangeLanguage
       {showForgotModal && (
         <div style={{
           position: 'fixed',
-          top: 0,
-          left: 0,
-          width: '100vw',
-          height: '100vh',
-          background: 'rgba(0,0,0,0.6)',
-          backdropFilter: 'blur(8px)',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          zIndex: 10000,
-          padding: '20px'
+          top: 0, left: 0, width: '100vw', height: '100vh',
+          background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(8px)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          zIndex: 10000, padding: '20px'
         }}>
           <div className="glass-panel" style={{ padding: '24px', maxWidth: '380px', width: '100%', textAlign: 'center' }}>
             <h3 style={{ fontSize: '16px', fontWeight: '800', marginBottom: '12px' }}>{t('forgotPin')}</h3>
@@ -291,6 +310,127 @@ export default function LoginScreen({ onLoginSuccess, language, onChangeLanguage
             >
               {t('close')}
             </button>
+          </div>
+        </div>
+      )}
+
+      {/* ── Speelsterkte Calculator Modal ── */}
+      {showCalc && (
+        <div style={{
+          position: 'fixed', inset: 0, zIndex: 20000,
+          background: 'rgba(0,0,0,0.8)', backdropFilter: 'blur(8px)',
+          display: 'flex', alignItems: 'flex-end', justifyContent: 'center'
+        }}>
+          <div className="glass-panel" style={{
+            width: '100%', maxWidth: '480px',
+            borderRadius: '20px 20px 0 0',
+            padding: '24px 20px 32px',
+            background: 'rgba(15,17,26,0.97)',
+            border: '1px solid var(--color-border-glass)',
+            display: 'flex', flexDirection: 'column', gap: '14px',
+            maxHeight: '88vh', overflowY: 'auto'
+          }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+              <div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
+                  <BarChart2 size={18} style={{ color: 'var(--color-primary)' }} />
+                  <h2 style={{ fontSize: '16px', fontWeight: '800', color: 'var(--color-primary)', margin: 0 }}>
+                    {t('calcTitle')}
+                  </h2>
+                </div>
+                <p style={{ fontSize: '11px', color: 'var(--color-text-muted)', lineHeight: '1.5', margin: 0 }}>
+                  {t('calcSub')}
+                </p>
+              </div>
+              <button
+                onClick={() => setShowCalc(false)}
+                style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--color-text-muted)', padding: '4px' }}
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            {[
+              { q: cq1, setter: setCq1, label: t('qRacket'), opts: [t('qRacket_opt0'), t('qRacket_opt1'), t('qRacket_opt2')] },
+              { q: cq2, setter: setCq2, label: t('qPadel'), opts: [t('qPadel_opt0'), t('qPadel_opt1'), t('qPadel_opt2'), t('qPadel_opt3')] },
+              { q: cq3, setter: setCq3, label: t('qGlass'), opts: [t('qGlass_opt0'), t('qGlass_opt1'), t('qGlass_opt2')] },
+              { q: cq4, setter: setCq4, label: t('qStrokes'), opts: [t('qStrokes_opt0'), t('qStrokes_opt1'), t('qStrokes_opt2')] }
+            ].map((question, qi) => (
+              <div key={qi} style={{
+                background: 'rgba(255,255,255,0.03)',
+                border: '1px solid var(--color-border-glass)',
+                borderRadius: '10px', padding: '14px'
+              }}>
+                <p style={{ fontSize: '12px', fontWeight: '700', color: 'var(--color-text-primary)', margin: '0 0 10px 0' }}>
+                  {question.label}
+                </p>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                  {question.opts.map((opt, oi) => {
+                    const sel = question.q === oi;
+                    return (
+                      <button key={oi} type="button" onClick={() => question.setter(oi)}
+                        style={{
+                          width: '100%', textAlign: 'left', padding: '10px 12px',
+                          borderRadius: '7px', border: '1px solid',
+                          borderColor: sel ? 'var(--color-primary)' : 'var(--color-border-glass)',
+                          background: sel ? 'rgba(212,255,0,0.08)' : 'rgba(255,255,255,0.02)',
+                          color: sel ? 'var(--color-primary)' : 'var(--color-text-muted)',
+                          fontSize: '12px', cursor: 'pointer', transition: 'all 0.15s ease',
+                          display: 'flex', alignItems: 'center', gap: '10px'
+                        }}
+                      >
+                        <span style={{
+                          width: '18px', height: '18px', borderRadius: '50%', flexShrink: 0,
+                          border: `2px solid ${sel ? 'var(--color-primary)' : 'rgba(255,255,255,0.2)'}`,
+                          background: sel ? 'var(--color-primary)' : 'transparent',
+                          display: 'flex', alignItems: 'center', justifyContent: 'center'
+                        }}>
+                          {sel && <Check size={10} style={{ color: '#0f111a' }} />}
+                        </span>
+                        {opt}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            ))}
+
+            {calcResult !== null ? (
+              <div style={{
+                background: 'rgba(212,255,0,0.07)', border: '1px solid rgba(212,255,0,0.25)',
+                borderRadius: '10px', padding: '16px', textAlign: 'center'
+              }}>
+                <div style={{ fontSize: '11px', color: 'var(--color-text-muted)', marginBottom: '6px' }}>
+                  {t('calcResult').replace('{rating}', '')}
+                </div>
+                <div style={{ fontSize: '42px', fontWeight: '900', color: 'var(--color-primary)', lineHeight: '1' }}>
+                  {calcResult.toFixed(1)}
+                </div>
+                <button
+                  type="button" className="btn-primary"
+                  onClick={() => {
+                    setLevel(String(Math.round(calcResult)));
+                    setShowCalc(false);
+                  }}
+                  style={{ marginTop: '14px', width: '100%' }}
+                >
+                  {t('useRating')}
+                </button>
+              </div>
+            ) : (
+              <button
+                type="button" className="btn-primary"
+                onClick={() => {
+                  if (cq1 >= 0 && cq2 >= 0 && cq3 >= 0 && cq4 >= 0) {
+                    setCalcResult(calcPadelRating(cq1, cq2, cq3, cq4));
+                  }
+                }}
+                disabled={!(cq1 >= 0 && cq2 >= 0 && cq3 >= 0 && cq4 >= 0)}
+                style={{ opacity: (cq1 >= 0 && cq2 >= 0 && cq3 >= 0 && cq4 >= 0) ? 1 : 0.4 }}
+              >
+                {language === 'nl' ? 'Bereken Mijn Rating' : 'Calculate My Rating'}
+              </button>
+            )}
           </div>
         </div>
       )}
