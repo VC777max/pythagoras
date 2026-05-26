@@ -150,6 +150,8 @@ try { db.prepare("ALTER TABLE players ADD COLUMN avatar TEXT NOT NULL DEFAULT 'a
 try { db.prepare("ALTER TABLE players ADD COLUMN available_now INTEGER NOT NULL DEFAULT 0").run(); } catch(e) {}
 try { db.prepare("ALTER TABLE players ADD COLUMN pref_playtime INTEGER NOT NULL DEFAULT 90").run(); } catch(e) {}
 try { db.prepare("ALTER TABLE players ADD COLUMN pref_court_type TEXT NOT NULL DEFAULT 'double'").run(); } catch(e) {}
+try { db.prepare("ALTER TABLE notifications ADD COLUMN link_id TEXT").run(); } catch(e) {}
+
 
 // Create indexes to optimize matchmaking and queries
 try { db.prepare("CREATE INDEX IF NOT EXISTS idx_avail_player ON player_availability(player_id)").run(); } catch(e) {}
@@ -171,6 +173,17 @@ db.exec(`
     player_id TEXT NOT NULL,
     badge_id TEXT NOT NULL,
     earned_at TEXT NOT NULL DEFAULT (datetime('now')),
+    FOREIGN KEY (player_id) REFERENCES players (id) ON DELETE CASCADE
+  );
+
+  CREATE TABLE IF NOT EXISTS notifications (
+    id TEXT PRIMARY KEY,
+    player_id TEXT NOT NULL,
+    message TEXT NOT NULL,
+    type TEXT NOT NULL,
+    link_id TEXT,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    read INTEGER NOT NULL DEFAULT 0,
     FOREIGN KEY (player_id) REFERENCES players (id) ON DELETE CASCADE
   );
 

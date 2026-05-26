@@ -97,9 +97,9 @@ const authenticateToken = (req, res, next) => {
     }
     req.user = user; // user contains { id: playerId }
 
-    // Authorization check: prevent player A from modifying player B's data
+    // Authorization check: prevent player A from modifying player B's data (Melvin bypasses)
     const targetPlayerId = req.params.id || req.body.playerId || req.query.playerId || req.body.player_id;
-    if (targetPlayerId && targetPlayerId !== req.user.id) {
+    if (targetPlayerId && targetPlayerId !== req.user.id && req.user.id !== 'p-melvin') {
       return res.status(403).json({ error: 'Access denied: unauthorized resource access' });
     }
 
@@ -208,17 +208,17 @@ app.put('/api/players/:id', authenticateToken, (req, res) => {
   const { id } = req.params;
   const { name, level, position, pin, city, preferred_clubs, avatar, pref_playtime, pref_court_type } = req.body;
 
-  if (!name || level === undefined || !position || !pin || !city) {
-    return res.status(400).json({ error: 'Name, level, position, pin, and city are required' });
+  if (!name || level === undefined || !pin || !city) {
+    return res.status(400).json({ error: 'Name, level, pin, and city are required' });
   }
 
   try {
-    const playerExists = db.prepare('SELECT id FROM players WHERE id = ?').get(id);
+    const playerExists = db.prepare('SELECT * FROM players WHERE id = ?').get(id);
     if (!playerExists) {
       return res.status(404).json({ error: 'Player not found' });
     }
 
-    const nameConflict = db.prepare('SELECT id FROM players WHERE name = ? AND id != ?').get(name, id);
+    const nameConflict = db.prepare('SELECT id FROM players WHERE name = ? AND id != ? COLLATE NOCASE').get(name, id);
     if (nameConflict) {
       return res.status(409).json({ error: 'Player name already exists' });
     }
@@ -233,17 +233,246 @@ app.put('/api/players/:id', authenticateToken, (req, res) => {
       savedPin = bcrypt.hashSync(pin, salt);
     }
 
+    const dbLevel = parseInt(level);
+    let eloVal = playerExists.elo;
+    let eloPeakVal = playerExists.elo_peak;
+
+    // Recalculate ELO if level/rating was edited
+    if (dbLevel !== playerExists.level) {
+      eloVal = 800 + 150 * dbLevel;
+      eloPeakVal = Math.max(eloVal, playerExists.elo_peak);
+    }
+
     db.prepare(`
       UPDATE players
-      SET name = ?, level = ?, position = ?, pin = ?, city = ?, preferred_clubs = ?, avatar = ?, pref_playtime = ?, pref_court_type = ?
+      SET name = ?, level = ?, position = ?, pin = ?, city = ?, preferred_clubs = ?, avatar = ?, pref_playtime = ?, pref_court_type = ?, elo = ?, elo_peak = ?
       WHERE id = ?
-    `).run(name, parseInt(level), position, savedPin, city, JSON.stringify(preferred_clubs || []), avatar || 'avatar_01', playtime, courtType, id);
+    `).run(name, dbLevel, position || playerExists.position, savedPin, city, JSON.stringify(preferred_clubs || []), avatar || 'avatar_01', playtime, courtType, eloVal, eloPeakVal, id);
 
     const updatedPlayer = db.prepare('SELECT * FROM players WHERE id = ?').get(id);
     updatedPlayer.preferred_clubs = JSON.parse(updatedPlayer.preferred_clubs || '[]');
     updatedPlayer.peakz_rating = getPeakzRating(updatedPlayer.elo);
     updatedPlayer.peakz_rating_peak = getPeakzRating(updatedPlayer.elo_peak);
     return res.json(updatedPlayer);
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ error: 'Database error' });
+  }
+});
+
+// Helper: Create notification and log in-app alert
+function createNotification(playerId, message, type, linkId = null) {
+  try {
+    const id = 'n-' + uuidv4().slice(0, 8);
+    db.prepare(`
+      INSERT INTO notifications (id, player_id, message, type, link_id, created_at, read)
+      VALUES (?, ?, ?, ?, ?, datetime('now'), 0)
+    `).run(id, playerId, message, type, linkId);
+
+    const player = db.prepare('SELECT name FROM players WHERE id = ?').get(playerId);
+    console.log(`[IN-APP NOTIFICATION LOG] Sent to ${player?.name || playerId} [Type: ${type}]: "${message}" (Link: ${linkId})`);
+  } catch (err) {
+    console.error('Failed to create notification:', err);
+  }
+}
+
+// Middleware: Admin access verification
+const requireAdmin = (req, res, next) => {
+  if (!req.user || req.user.id !== 'p-melvin') {
+    return res.status(403).json({ error: 'Access denied: admin access only' });
+  }
+  next();
+};
+
+// ----------------------------------------
+// Admin Endpoints (Melvin Only)
+// ----------------------------------------
+
+// GET all players with stats and ELO
+app.get('/api/admin/players', authenticateToken, requireAdmin, (req, res) => {
+  try {
+    const players = db.prepare('SELECT id, name, level, position, sessions, hours, wins, games, avail_mode, city, preferred_clubs, elo, elo_peak, avatar, available_now FROM players').all();
+    players.forEach(p => {
+      p.preferred_clubs = JSON.parse(p.preferred_clubs || '[]');
+      p.peakz_rating = getPeakzRating(p.elo);
+      p.peakz_rating_peak = getPeakzRating(p.elo_peak);
+    });
+    return res.json(players);
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ error: 'Database error' });
+  }
+});
+
+// CREATE a player manually
+app.post('/api/admin/players', authenticateToken, requireAdmin, (req, res) => {
+  const { name, level, position, pin, city, preferred_clubs } = req.body;
+  if (!name || level === undefined || !position || !pin || !city) {
+    return res.status(400).json({ error: 'Name, level (rating), position, pin, and city are required' });
+  }
+
+  try {
+    const existing = db.prepare('SELECT id FROM players WHERE name = ? COLLATE NOCASE').get(name);
+    if (existing) {
+      return res.status(409).json({ error: 'Player name already exists' });
+    }
+
+    const newId = 'p-' + uuidv4().slice(0, 8);
+    const salt = bcrypt.genSaltSync(10);
+    const hashedPin = bcrypt.hashSync(pin, salt);
+
+    const ratingVal = parseInt(level) || 7;
+    const dbLevel = 10 - ratingVal;
+    const eloVal = 800 + 150 * dbLevel;
+
+    db.prepare(`
+      INSERT INTO players (id, name, level, position, pin, city, preferred_clubs, elo, elo_peak)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(newId, name, dbLevel, position, hashedPin, city, JSON.stringify(preferred_clubs || []), eloVal, eloVal);
+
+    const newPlayer = db.prepare('SELECT * FROM players WHERE id = ?').get(newId);
+    newPlayer.preferred_clubs = JSON.parse(newPlayer.preferred_clubs || '[]');
+    newPlayer.peakz_rating = getPeakzRating(newPlayer.elo);
+    newPlayer.peakz_rating_peak = getPeakzRating(newPlayer.elo_peak);
+
+    return res.status(201).json(newPlayer);
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ error: 'Database error' });
+  }
+});
+
+// UPDATE player details
+app.put('/api/admin/players/:id', authenticateToken, requireAdmin, (req, res) => {
+  const { id } = req.params;
+  const { name, level, position, city, preferred_clubs, elo, avatar, pref_playtime, pref_court_type, wins, sessions, hours, games } = req.body;
+
+  if (!name || level === undefined || !position || !city) {
+    return res.status(400).json({ error: 'Name, level, position, and city are required' });
+  }
+
+  try {
+    const player = db.prepare('SELECT * FROM players WHERE id = ?').get(id);
+    if (!player) {
+      return res.status(404).json({ error: 'Player not found' });
+    }
+
+    const nameConflict = db.prepare('SELECT id FROM players WHERE name = ? AND id != ? COLLATE NOCASE').get(name, id);
+    if (nameConflict) {
+      return res.status(409).json({ error: 'Player name already exists' });
+    }
+
+    const dbLevel = parseInt(level);
+    let eloVal = elo !== undefined ? parseInt(elo) : player.elo;
+
+    if (dbLevel !== player.level) {
+      eloVal = 800 + 150 * dbLevel;
+    }
+
+    db.prepare(`
+      UPDATE players
+      SET name = ?, level = ?, position = ?, city = ?, preferred_clubs = ?, elo = ?, elo_peak = ?, avatar = ?, pref_playtime = ?, pref_court_type = ?, wins = ?, sessions = ?, hours = ?, games = ?
+      WHERE id = ?
+    `).run(
+      name,
+      dbLevel,
+      position,
+      city,
+      JSON.stringify(preferred_clubs || []),
+      eloVal,
+      Math.max(eloVal, player.elo_peak),
+      avatar || player.avatar || 'avatar_01',
+      pref_playtime !== undefined ? parseInt(pref_playtime) : player.pref_playtime,
+      pref_court_type || player.pref_court_type || 'double',
+      wins !== undefined ? parseInt(wins) : player.wins,
+      sessions !== undefined ? parseInt(sessions) : player.sessions,
+      hours !== undefined ? parseInt(hours) : player.hours,
+      games !== undefined ? parseInt(games) : player.games,
+      id
+    );
+
+    const updated = db.prepare('SELECT * FROM players WHERE id = ?').get(id);
+    updated.preferred_clubs = JSON.parse(updated.preferred_clubs || '[]');
+    updated.peakz_rating = getPeakzRating(updated.elo);
+    updated.peakz_rating_peak = getPeakzRating(updated.elo_peak);
+    return res.json(updated);
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ error: 'Database error' });
+  }
+});
+
+// RESET player PIN
+app.put('/api/admin/players/:id/reset-pin', authenticateToken, requireAdmin, (req, res) => {
+  const { id } = req.params;
+  const { pin } = req.body;
+
+  if (!pin || pin.length !== 4) {
+    return res.status(400).json({ error: 'A 4-digit PIN is required' });
+  }
+
+  try {
+    const playerExists = db.prepare('SELECT id FROM players WHERE id = ?').get(id);
+    if (!playerExists) {
+      return res.status(404).json({ error: 'Player not found' });
+    }
+
+    const salt = bcrypt.genSaltSync(10);
+    const hashedPin = bcrypt.hashSync(pin, salt);
+
+    db.prepare('UPDATE players SET pin = ? WHERE id = ?').run(hashedPin, id);
+    return res.json({ success: true, message: 'PIN reset successfully' });
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ error: 'Database error' });
+  }
+});
+
+// DELETE player
+app.delete('/api/admin/players/:id', authenticateToken, requireAdmin, (req, res) => {
+  const { id } = req.params;
+
+  try {
+    const playerExists = db.prepare('SELECT id FROM players WHERE id = ?').get(id);
+    if (!playerExists) {
+      return res.status(404).json({ error: 'Player not found' });
+    }
+
+    db.prepare('DELETE FROM players WHERE id = ?').run(id);
+    return res.json({ success: true, message: 'Player deleted successfully' });
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ error: 'Database error' });
+  }
+});
+
+// ----------------------------------------
+// Notification Endpoints
+// ----------------------------------------
+
+// GET active notifications
+app.get('/api/notifications', authenticateToken, (req, res) => {
+  const playerId = req.user.id;
+  try {
+    const list = db.prepare(`
+      SELECT * FROM notifications 
+      WHERE player_id = ? 
+      ORDER BY created_at DESC 
+      LIMIT 30
+    `).all(playerId);
+    return res.json(list);
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ error: 'Database error' });
+  }
+});
+
+// Mark all notifications as read
+app.post('/api/notifications/read-all', authenticateToken, (req, res) => {
+  const playerId = req.user.id;
+  try {
+    db.prepare('UPDATE notifications SET read = 1 WHERE player_id = ?').run(playerId);
+    return res.json({ success: true, message: 'All notifications marked as read' });
   } catch (err) {
     console.error(err);
     return res.status(500).json({ error: 'Database error' });
@@ -491,6 +720,16 @@ app.post('/api/matches', (req, res) => {
 
           transaction();
 
+          // Create notifications for the 4 players
+          selected.forEach(p => {
+            createNotification(
+              p.player_id,
+              `Nieuw wedstrijdvoorstel op ${nextDate} van ${slot.start_time} tot ${slot.end_time} bij ${commonClub.replace("Peakz Padel ", "Padel Club ")}!`,
+              'proposal',
+              matchId
+            );
+          });
+
           proposedMatch = {
             id: matchId,
             date: nextDate,
@@ -628,6 +867,36 @@ app.post('/api/matches/:id/respond', (req, res) => {
       WHERE id = ?
     `).run(newStatus, JSON.stringify(responses), id);
 
+    // Fetch all participants to send notifications
+    try {
+      const participants = db.prepare('SELECT player_id FROM match_players WHERE match_id = ?').all(id).map(p => p.player_id);
+      
+      if (newStatus === 'cancelled') {
+        const rejectingPlayer = db.prepare('SELECT name FROM players WHERE id = ?').get(playerId);
+        participants.forEach(pId => {
+          if (pId !== playerId) {
+            createNotification(
+              pId,
+              `Matchvoorstel voor ${match.date} ${match.start} is geannuleerd omdat ${rejectingPlayer?.name || 'een speler'} heeft geweigerd.`,
+              'cancelled',
+              id
+            );
+          }
+        });
+      } else if (newStatus === 'confirmed') {
+        participants.forEach(pId => {
+          createNotification(
+            pId,
+            `Iedereen heeft geaccepteerd! De wedstrijd op ${match.date} ${match.start} is bevestigd. Wie boekt de baan?`,
+            'confirmed',
+            id
+          );
+        });
+      }
+    } catch (notifErr) {
+      console.error('Failed to notify players on match response:', notifErr);
+    }
+
     return res.json({
       success: true,
       status: newStatus,
@@ -693,6 +962,24 @@ app.post('/api/matches/:id/claim-booking', authenticateToken, (req, res) => {
     if (result.changes > 0) {
       // This player won the race
       const player = db.prepare('SELECT name FROM players WHERE id = ?').get(player_id);
+      
+      // Notify other participants
+      try {
+        const participants = db.prepare('SELECT player_id FROM match_players WHERE match_id = ?').all(id).map(p => p.player_id);
+        participants.forEach(pId => {
+          if (pId !== player_id) {
+            createNotification(
+              pId,
+              `${player?.name} gaat de baan boeken voor de wedstrijd op ${match.date} om ${match.start}.`,
+              'claimed',
+              id
+            );
+          }
+        });
+      } catch (notifErr) {
+        console.error('Failed to notify players on booking claim:', notifErr);
+      }
+
       return res.json({ success: true, booker_id: player_id, booker_name: player?.name });
     } else {
       // Someone else already claimed it
@@ -728,6 +1015,24 @@ app.post('/api/matches/:id/confirm-booked', authenticateToken, (req, res) => {
     ).run(booking_url || null, tikkie_url || null, id);
 
     const booker = db.prepare('SELECT name FROM players WHERE id = ?').get(player_id);
+
+    // Notify other participants
+    try {
+      const participants = db.prepare('SELECT player_id FROM match_players WHERE match_id = ?').all(id).map(p => p.player_id);
+      participants.forEach(pId => {
+        if (pId !== player_id) {
+          createNotification(
+            pId,
+            `${booker?.name} heeft de baan geboekt voor ${match.date} ${match.start}! Bekijk de reservering en betaallink in de app.`,
+            'booked',
+            id
+          );
+        }
+      });
+    } catch (notifErr) {
+      console.error('Failed to notify players on booking confirmation:', notifErr);
+    }
+
     return res.json({
       success: true,
       status: 'booked',
@@ -786,6 +1091,21 @@ app.post('/api/matches/:id/score', authenticateToken, (req, res) => {
       JSON.stringify(scoreData),
       id
     );
+
+    // Notify opponents who need to verify
+    try {
+      const submitter = db.prepare('SELECT name FROM players WHERE id = ?').get(submitted_by);
+      opponentTeamPlayers.forEach(pId => {
+        createNotification(
+          pId,
+          `${submitter?.name} heeft de stand ingevoerd voor de wedstrijd op ${match.date}. Gelieve deze te bevestigen.`,
+          'score_pending',
+          id
+        );
+      });
+    } catch (notifErr) {
+      console.error('Failed to notify opponents on score submission:', notifErr);
+    }
 
     return res.json({ success: true, message: 'Score submitted. Awaiting opponent verification.', score: scoreData });
   } catch (err) {
@@ -953,10 +1273,43 @@ app.post('/api/matches/:id/verify', authenticateToken, (req, res) => {
 
       transaction();
 
+      // Notify all participants about score confirmation
+      try {
+        const verifier = db.prepare('SELECT name FROM players WHERE id = ?').get(playerId);
+        allMatchPlayers.forEach(pId => {
+          createNotification(
+            pId,
+            `De uitslag van de wedstrijd op ${match.date} is goedgekeurd door ${verifier?.name}. Je rating is bijgewerkt!`,
+            'score_confirmed',
+            id
+          );
+        });
+      } catch (notifErr) {
+        console.error('Failed to notify players on score confirmation:', notifErr);
+      }
+
       return res.json({ success: true, message: 'Score verified and rankings updated successfully', scoreStatus: 'confirmed' });
     } else {
       // Score rejected: reset it so it can be submitted again
       db.prepare('UPDATE matches SET score = NULL WHERE id = ?').run(id);
+
+      // Notify all participants about score rejection
+      try {
+        const proposedTeams = JSON.parse(match.proposed_teams);
+        const allPlayers = [...proposedTeams.team1, ...proposedTeams.team2];
+        const verifier = db.prepare('SELECT name FROM players WHERE id = ?').get(playerId);
+        allPlayers.forEach(pId => {
+          createNotification(
+            pId,
+            `De uitslag van de wedstrijd op ${match.date} is afgewezen door ${verifier?.name}. Gelieve de juiste stand opnieuw in te voeren.`,
+            'score_rejected',
+            id
+          );
+        });
+      } catch (notifErr) {
+        console.error('Failed to notify players on score rejection:', notifErr);
+      }
+
       return res.json({ success: true, message: 'Score rejected. Re-submission required.', scoreStatus: 'rejected' });
     }
   } catch (err) {
@@ -1191,6 +1544,20 @@ app.post('/api/matches/urgent', authenticateToken, (req, res) => {
       });
 
       transaction();
+
+      // Notify the matched players
+      try {
+        selected.forEach(p => {
+          createNotification(
+            p.id,
+            `Urgent: Nieuw live wedstrijdvoorstel van ${startStr} tot ${endStr} bij ${commonClub.replace("Peakz Padel ", "Padel Club ")}!`,
+            'proposal',
+            matchId
+          );
+        });
+      } catch (notifErr) {
+        console.error('Failed to notify players on urgent match:', notifErr);
+      }
 
       return res.status(201).json({
         success: true,
