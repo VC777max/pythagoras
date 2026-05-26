@@ -1,14 +1,17 @@
 import React, { useState, useEffect } from 'react';
 import { Award, Calendar, Zap, CheckCircle2, User, ExternalLink, Link2, DollarSign } from 'lucide-react';
+import { translate } from '../utils/i18n';
 
-export default function HomeScreen({ activePlayer, token, onRefreshPlayer }) {
+export default function HomeScreen({ activePlayer, token, onRefreshPlayer, language }) {
   const [activeMatches, setActiveMatches] = useState([]);
   const [urgentLoading, setUrgentLoading] = useState(false);
   const [claimingId, setClaimingId] = useState(null);
   const [tikkieUrl, setTikkieUrl] = useState('');
   const [confirmingId, setConfirmingId] = useState(null);
 
-  // Helper to calculate Peakz Rating from ELO
+  const t = (key, replacements) => translate(key, language, replacements);
+
+  // Helper to calculate Padel Rating from ELO
   const getPeakzRating = (elo) => {
     const r = 10.0 - (elo - 800) / 150.0;
     return Math.max(1.0, Math.min(10.0, r)).toFixed(1);
@@ -31,7 +34,6 @@ export default function HomeScreen({ activePlayer, token, onRefreshPlayer }) {
 
   useEffect(() => {
     loadActiveMatches();
-    // Refresh match list every 10 seconds
     const interval = setInterval(loadActiveMatches, 10000);
     return () => clearInterval(interval);
   }, [activePlayer.id, token]);
@@ -82,7 +84,6 @@ export default function HomeScreen({ activePlayer, token, onRefreshPlayer }) {
   const handleConfirmBooked = async (matchId) => {
     setConfirmingId(matchId);
     try {
-      // Find the match to get details
       const matchObj = activeMatches.find(m => m.id === matchId);
       const cleanLoc = matchObj.location.replace("Peakz Padel ", "");
       const encodedLoc = encodeURIComponent(cleanLoc);
@@ -136,7 +137,7 @@ export default function HomeScreen({ activePlayer, token, onRefreshPlayer }) {
           <h2 style={{ fontSize: '18px', fontWeight: '800' }}>{activePlayer.name}</h2>
           <div style={{ display: 'flex', gap: '8px', marginTop: '4px' }}>
             <span className="badge-chip primary">
-              <Award size={10} /> Peakz Rating: {getPeakzRating(activePlayer.elo)}
+              <Award size={10} /> {t('rating')}: {getPeakzRating(activePlayer.elo)}
             </span>
             <span className="badge-chip">
               {activePlayer.city}
@@ -148,13 +149,13 @@ export default function HomeScreen({ activePlayer, token, onRefreshPlayer }) {
       {/* Play Within The Hour Urgent Toggle */}
       <div className="glass-panel" style={{ padding: '16px', border: activePlayer.available_now === 1 ? '1px dashed var(--color-primary)' : '1px solid var(--color-border-glass)' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <div>
+          <div style={{ paddingRight: '12px' }}>
             <h3 style={{ fontSize: '14px', fontWeight: '800', display: 'flex', alignItems: 'center', gap: '6px' }}>
               <Zap size={14} style={{ color: activePlayer.available_now === 1 ? 'var(--color-primary)' : 'var(--color-text-muted)' }} />
-              Play Within The Hour
+              {t('liveHourTitle')}
             </h3>
-            <p style={{ fontSize: '11px', color: 'var(--color-text-muted)', marginTop: '2px' }}>
-              Toggle on to match instantly with active players at {activePlayer.city} clubs.
+            <p style={{ fontSize: '11px', color: 'var(--color-text-muted)', marginTop: '2px', lineHeight: '1.4' }}>
+              {t('liveHourSub', { city: activePlayer.city })}
             </p>
           </div>
           <button
@@ -170,10 +171,11 @@ export default function HomeScreen({ activePlayer, token, onRefreshPlayer }) {
               cursor: 'pointer',
               background: activePlayer.available_now === 1 ? 'var(--color-primary)' : 'rgba(255,255,255,0.06)',
               color: activePlayer.available_now === 1 ? 'var(--color-bg-dark)' : 'var(--color-text-primary)',
-              transition: 'all 0.2s ease'
+              transition: 'all 0.2s ease',
+              flexShrink: 0
             }}
           >
-            {activePlayer.available_now === 1 ? 'ACTIVE' : 'GO LIVE'}
+            {activePlayer.available_now === 1 ? t('liveHourActive') : t('liveHourGoLive')}
           </button>
         </div>
       </div>
@@ -181,14 +183,14 @@ export default function HomeScreen({ activePlayer, token, onRefreshPlayer }) {
       {/* Matches List */}
       <div>
         <h3 className="header-title" style={{ fontSize: '13px', color: 'var(--color-text-muted)', marginBottom: '10px' }}>
-          My Active Matches
+          {t('activeMatchesTitle')}
         </h3>
         
         {activeMatches.length === 0 ? (
           <div className="glass-panel" style={{ padding: '30px', textAlign: 'center', color: 'var(--color-text-muted)' }}>
             <Calendar size={32} style={{ margin: '0 auto 10px auto', opacity: 0.4 }} />
-            <p style={{ fontSize: '13px' }}>No active or upcoming matches matches.</p>
-            <p style={{ fontSize: '11px', marginTop: '2px' }}>Check back later or adjust your availability.</p>
+            <p style={{ fontSize: '13px' }}>{t('noActiveMatches')}</p>
+            <p style={{ fontSize: '11px', marginTop: '2px' }}>{t('checkBackLater')}</p>
           </div>
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
@@ -196,6 +198,7 @@ export default function HomeScreen({ activePlayer, token, onRefreshPlayer }) {
               const iAmClaimer = match.booking_claimed_by === activePlayer.id;
               const hasBooker = match.booking_claimed_by != null;
               const isBooked = match.status === 'booked';
+              const cleanLocation = match.location.replace("Peakz Padel ", "Padel Club ");
 
               return (
                 <div key={match.id} className="glass-panel" style={{ padding: '16px', position: 'relative', overflow: 'hidden' }}>
@@ -213,7 +216,7 @@ export default function HomeScreen({ activePlayer, token, onRefreshPlayer }) {
                   {/* Header */}
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '12px' }}>
                     <div>
-                      <h4 style={{ fontSize: '14px', fontWeight: '800' }}>{match.location}</h4>
+                      <h4 style={{ fontSize: '14px', fontWeight: '800' }}>{cleanLocation}</h4>
                       <p style={{ fontSize: '12px', color: 'var(--color-text-muted)', marginTop: '2px' }}>
                         {match.date} • {match.start} - {match.end}
                       </p>
@@ -252,12 +255,12 @@ export default function HomeScreen({ activePlayer, token, onRefreshPlayer }) {
                           onClick={() => handleClaimBooking(match.id)}
                           disabled={claimingId === match.id}
                         >
-                          I'll Book the Court!
+                          {t('illBook')}
                         </button>
                       ) : iAmClaimer ? (
                         <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', background: 'rgba(255, 71, 71, 0.05)', border: '1px solid rgba(255, 71, 71, 0.2)', padding: '12px', borderRadius: '8px' }}>
                           <div style={{ fontSize: '11px', fontWeight: '900', color: 'var(--color-danger)', letterSpacing: '0.05em' }}>
-                            YOUR TURN TO BOOK THE COURT
+                            {t('yourTurn')}
                           </div>
                           
                           <button
@@ -272,11 +275,11 @@ export default function HomeScreen({ activePlayer, token, onRefreshPlayer }) {
                             }}
                             style={{ display: 'flex', gap: '8px', background: 'rgba(255,255,255,0.05)', color: '#fff', fontSize: '12px', padding: '10px' }}
                           >
-                            <ExternalLink size={14} /> Open Peakz Booking Page
+                            <ExternalLink size={14} /> {t('openBooking')}
                           </button>
 
                           <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', marginTop: '4px' }}>
-                            <label style={{ fontSize: '10px', color: 'var(--color-text-muted)', fontWeight: '700' }}>Tikkie Payment Link (Optional)</label>
+                            <label style={{ fontSize: '10px', color: 'var(--color-text-muted)', fontWeight: '700' }}>{t('tikkieLabel')}</label>
                             <input
                               type="text"
                               className="input-field"
@@ -293,13 +296,13 @@ export default function HomeScreen({ activePlayer, token, onRefreshPlayer }) {
                             disabled={confirmingId === match.id}
                             style={{ fontSize: '12px', padding: '10px', background: 'var(--color-primary)' }}
                           >
-                            Confirm Court Booked!
+                            {t('confirmBooked')}
                           </button>
                         </div>
                       ) : (
                         <div style={{ padding: '10px', background: 'rgba(255,255,255,0.03)', borderRadius: '6px', border: '1px solid var(--color-border-glass)', fontSize: '12px', color: 'var(--color-text-muted)', display: 'flex', alignItems: 'center', gap: '8px' }}>
                           <CheckCircle2 size={14} style={{ color: 'var(--color-primary)' }} />
-                          <span>Waiting for booker to complete court booking...</span>
+                          <span>{t('waitingForBooker')}</span>
                         </div>
                       )}
                     </div>
@@ -313,7 +316,7 @@ export default function HomeScreen({ activePlayer, token, onRefreshPlayer }) {
                           onClick={() => window.open(match.booking_url, '_blank')}
                           style={{ flex: 1, padding: '8px 0', fontSize: '11px', gap: '4px' }}
                         >
-                          <Link2 size={12} /> View Reservation
+                          <Link2 size={12} /> {t('viewReservation')}
                         </button>
                       )}
                       {match.tikkie_url && (
@@ -322,7 +325,7 @@ export default function HomeScreen({ activePlayer, token, onRefreshPlayer }) {
                           onClick={() => window.open(match.tikkie_url, '_blank')}
                           style={{ flex: 1, padding: '8px 0', fontSize: '11px', gap: '4px', background: '#30c553', color: '#fff' }}
                         >
-                          <DollarSign size={12} /> Pay Booker (Tikkie)
+                          <DollarSign size={12} /> {t('payBooker')}
                         </button>
                       )}
                     </div>

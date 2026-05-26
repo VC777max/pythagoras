@@ -6,12 +6,14 @@ import ScheduleScreen from './components/ScheduleScreen';
 import CourtsScreen from './components/CourtsScreen';
 import LeaderboardScreen from './components/LeaderboardScreen';
 import SettingsScreen from './components/SettingsScreen';
+import { getLanguage, setLanguage, translate } from './utils/i18n';
 
 export default function App() {
   const [activePlayer, setActivePlayer] = useState(null);
   const [token, setToken] = useState(null);
   const [activeTab, setActiveTab] = useState('home');
   const [loading, setLoading] = useState(true);
+  const [language, setLanguageState] = useState(getLanguage());
 
   // Load player and token from localStorage on mount
   useEffect(() => {
@@ -30,7 +32,6 @@ export default function App() {
   }, []);
 
   const handleLoginSuccess = (data) => {
-    // data contains { player, token }
     setActivePlayer(data.player);
     setToken(data.token);
     localStorage.setItem('padel_active_player', JSON.stringify(data.player));
@@ -62,6 +63,13 @@ export default function App() {
     }
   };
 
+  const handleChangeLanguage = (lang) => {
+    setLanguage(lang);
+    setLanguageState(lang);
+  };
+
+  const t = (key, replacements) => translate(key, language, replacements);
+
   if (loading) {
     return (
       <div style={{
@@ -81,7 +89,11 @@ export default function App() {
   if (!activePlayer || !token) {
     return (
       <div className="container" style={{ justifyContent: 'center' }}>
-        <LoginScreen onLoginSuccess={handleLoginSuccess} />
+        <LoginScreen 
+          onLoginSuccess={handleLoginSuccess} 
+          language={language} 
+          onChangeLanguage={handleChangeLanguage} 
+        />
       </div>
     );
   }
@@ -92,19 +104,34 @@ export default function App() {
       {/* Tab content switcher */}
       <div style={{ flex: 1, paddingBottom: '30px' }}>
         {activeTab === 'home' && (
-          <HomeScreen activePlayer={activePlayer} token={token} onRefreshPlayer={refreshPlayer} />
+          <HomeScreen 
+            activePlayer={activePlayer} 
+            token={token} 
+            onRefreshPlayer={refreshPlayer} 
+            language={language}
+          />
         )}
         
         {activeTab === 'schedule' && (
-          <ScheduleScreen activePlayer={activePlayer} token={token} />
+          <ScheduleScreen 
+            activePlayer={activePlayer} 
+            token={token} 
+            language={language}
+          />
         )}
         
         {activeTab === 'courts' && (
-          <CourtsScreen activePlayer={activePlayer} />
+          <CourtsScreen 
+            activePlayer={activePlayer} 
+            language={language}
+          />
         )}
         
         {activeTab === 'leaderboard' && (
-          <LeaderboardScreen activePlayer={activePlayer} />
+          <LeaderboardScreen 
+            activePlayer={activePlayer} 
+            language={language}
+          />
         )}
         
         {activeTab === 'settings' && (
@@ -113,6 +140,8 @@ export default function App() {
             token={token}
             onLogout={handleLogout}
             onRefreshPlayer={refreshPlayer}
+            language={language}
+            onChangeLanguage={handleChangeLanguage}
           />
         )}
       </div>
@@ -124,7 +153,7 @@ export default function App() {
           onClick={() => setActiveTab('home')}
         >
           <HomeIcon size={18} />
-          <span>Home</span>
+          <span>{t('home')}</span>
         </button>
 
         <button
@@ -132,7 +161,7 @@ export default function App() {
           onClick={() => setActiveTab('schedule')}
         >
           <Clock size={18} />
-          <span>Schedule</span>
+          <span>{t('schedule')}</span>
         </button>
 
         <button
@@ -140,7 +169,7 @@ export default function App() {
           onClick={() => setActiveTab('courts')}
         >
           <MapPin size={18} />
-          <span>Courts</span>
+          <span>{t('courts')}</span>
         </button>
 
         <button
@@ -148,7 +177,7 @@ export default function App() {
           onClick={() => setActiveTab('leaderboard')}
         >
           <Trophy size={18} />
-          <span>Leaderboard</span>
+          <span>{t('leaderboard')}</span>
         </button>
 
         <button
@@ -156,7 +185,7 @@ export default function App() {
           onClick={() => setActiveTab('settings')}
         >
           <SettingsIcon size={18} />
-          <span>Settings</span>
+          <span>{t('settings')}</span>
         </button>
       </nav>
 

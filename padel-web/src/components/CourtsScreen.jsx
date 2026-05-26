@@ -1,15 +1,18 @@
 import React, { useState, useEffect } from 'react';
 import { CloudRain, Sun, Wind, Check, AlertTriangle, ExternalLink } from 'lucide-react';
+import { translate } from '../utils/i18n';
 
-export default function CourtsScreen({ activePlayer }) {
+export default function CourtsScreen({ activePlayer, language }) {
   const [selectedTab, setSelectedTab] = useState(0);
   const [courts, setCourts] = useState([]);
   const [loading, setLoading] = useState(false);
 
+  const t = (key, replacements) => translate(key, language, replacements);
+
   // Generate target dates (Today, Tomorrow, +2 Days)
   const getDates = () => {
     const dates = [];
-    const daysName = ['Today', 'Tomorrow', '+2 Days'];
+    const daysKey = ['today', 'tomorrow', 'plus2Days'];
     for (let i = 0; i < 3; i++) {
       const d = new Date();
       d.setDate(d.getDate() + i);
@@ -17,7 +20,7 @@ export default function CourtsScreen({ activePlayer }) {
       const mm = String(d.getMonth() + 1).padStart(2, '0');
       const dd = String(d.getDate()).padStart(2, '0');
       dates.push({
-        label: daysName[i],
+        label: t(daysKey[i]),
         formatted: `${yyyy}-${mm}-${dd}`
       });
     }
@@ -49,7 +52,6 @@ export default function CourtsScreen({ activePlayer }) {
     loadCourts(datesList[selectedTab].formatted);
   }, [selectedTab, activePlayer.pref_playtime, activePlayer.pref_court_type, activePlayer.city]);
 
-  // Translate weather codes to labels
   const getWeatherIcon = (code) => {
     if (code >= 50) return <CloudRain size={14} style={{ color: 'var(--color-danger)' }} />;
     return <Sun size={14} style={{ color: 'var(--color-primary)' }} />;
@@ -86,20 +88,20 @@ export default function CourtsScreen({ activePlayer }) {
 
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <h3 className="header-title" style={{ fontSize: '13px', color: 'var(--color-text-muted)' }}>
-          Available Courts in {activePlayer.city || 'Groningen'}
+          {t('availableCourtsIn', { city: activePlayer.city || 'Groningen' })}
         </h3>
         <span style={{ fontSize: '11px', color: 'var(--color-primary)', fontWeight: '700' }}>
-          Filters: {activePlayer.pref_playtime}m • {activePlayer.pref_court_type === 'single' ? 'Single' : 'Double'}
+          {t('filters')}: {activePlayer.pref_playtime}m • {activePlayer.pref_court_type === 'single' ? 'Single' : 'Double'}
         </span>
       </div>
 
       {loading ? (
         <div style={{ textAlign: 'center', padding: '40px', color: 'var(--color-text-muted)', fontSize: '14px' }}>
-          Searching court reservations...
+          {t('searchingCourts')}
         </div>
       ) : courts.length === 0 ? (
         <div className="glass-panel" style={{ padding: '30px', textAlign: 'center', color: 'var(--color-text-muted)' }}>
-          <p style={{ fontSize: '13px' }}>No court bookings found for this day.</p>
+          <p style={{ fontSize: '13px' }}>{t('noCourtsFound')}</p>
         </div>
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
@@ -109,11 +111,12 @@ export default function CourtsScreen({ activePlayer }) {
             const playtime = activePlayer.pref_playtime || 90;
             const typeId = activePlayer.pref_court_type === "single" ? 10 : 13;
             const bookUrl = `https://www.peakzpadel.nl/reserveren/court-booking/reservation?daypart=---&date=${court.date}&location=${encodedLoc}&playingTimes=${playtime}&courtTypeIds=${typeId}`;
+            const displayLocation = court.location.replace("Peakz Padel ", "Padel Club ");
 
             return (
               <div key={index} className="glass-panel" style={{ padding: '16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                  <span style={{ fontSize: '14px', fontWeight: '800' }}>{court.location}</span>
+                  <span style={{ fontSize: '14px', fontWeight: '800' }}>{displayLocation}</span>
                   <span style={{ fontSize: '12px', color: 'var(--color-text-muted)' }}>
                     {court.time} • {court.courtType}
                   </span>
@@ -130,7 +133,7 @@ export default function CourtsScreen({ activePlayer }) {
                       
                       {!court.weather.is_playable && (
                         <span style={{ display: 'flex', alignItems: 'center', gap: '3px', color: 'var(--color-danger)', fontWeight: '700' }}>
-                          <AlertTriangle size={11} /> Bad Weather Risk
+                          <AlertTriangle size={11} /> {t('weatherRisk')}
                         </span>
                       )}
                     </div>
@@ -152,7 +155,7 @@ export default function CourtsScreen({ activePlayer }) {
                       gap: '4px'
                     }}
                   >
-                    Book <ExternalLink size={10} />
+                    {t('bookBtn')} <ExternalLink size={10} />
                   </button>
                 </div>
               </div>

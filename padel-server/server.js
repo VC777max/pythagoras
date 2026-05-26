@@ -16,9 +16,20 @@ const PORT = 3000;
 // Peakz Clubs per City Dictionary
 const CITIES_CLUBS = {
   'Groningen': ['Atoomweg', 'Euroborg', 'Suikerterrein'],
-  'Utrecht': ['Vechtsebanen', 'Cartesius'],
-  'Amsterdam': ['Sloterdijk', 'Kauwgombal', 'Amstel'],
-  'Zwolle': ['Zwolle Centrum']
+  'Amsterdam': ['Kauwgomballenkwartier', 'Olympiaplein', 'Sloterdijk', 'Zuidoost'],
+  'Utrecht': ['Vechtsebanen', 'Zeehaenkade'],
+  'Eindhoven': ['Beursgebouw', 'High Tech Campus', 'Vijfkamplaan'],
+  'Apeldoorn': ['De Maten', 'Malkenschoten'],
+  'Assen': ['Assen'],
+  'Haarlem': ['Haarlem'],
+  'Heemskerk': ['Heemskerk'],
+  'Heerlen': ['Heerlen'],
+  'Nijmegen': ['Nijmegen'],
+  'Oisterwijk': ['Oisterwijk'],
+  'Papendrecht': ['Papendrecht'],
+  'Sittard': ['Sittard'],
+  'Zutphen': ['Zutphen'],
+  'Zwolle': ['Zwolle']
 };
 
 // Convert ELO rating to decimal Peakz Rating (1.0 to 10.0, lower is better)
@@ -166,10 +177,15 @@ const registerHandler = (req, res) => {
     const salt = bcrypt.genSaltSync(10);
     const hashedPin = bcrypt.hashSync(pin, salt);
 
+    // level is the selected Padel rating (e.g. 7.0)
+    const ratingVal = parseInt(level) || 7;
+    const dbLevel = 10 - ratingVal;
+    const eloVal = 800 + 150 * dbLevel;
+
     db.prepare(`
-      INSERT INTO players (id, name, level, position, pin)
-      VALUES (?, ?, ?, ?, ?)
-    `).run(newId, name, parseInt(level), position, hashedPin);
+      INSERT INTO players (id, name, level, position, pin, elo, elo_peak)
+      VALUES (?, ?, ?, ?, ?, ?, ?)
+    `).run(newId, name, dbLevel, position, hashedPin, eloVal, eloVal);
 
     const player = db.prepare('SELECT * FROM players WHERE id = ?').get(newId);
     player.preferred_clubs = JSON.parse(player.preferred_clubs || '[]');
@@ -1293,6 +1309,12 @@ app.get('/api/courts', async (req, res) => {
     return res.status(400).json({ error: 'date query param is required' });
   }
 
+  // Get current date and time in Dutch timezone (where courts are located)
+  const tzOptions = { timeZone: 'Europe/Amsterdam', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false };
+  const formatter = new Intl.DateTimeFormat('sv-SE', tzOptions);
+  const [todayStr, currentTimeStr] = formatter.format(new Date()).split(' ');
+  const [currentHour, currentMin] = currentTimeStr.split(':').map(Number);
+
   const playtime = reqPlaytime ? parseInt(reqPlaytime) : 90;
   const court_type = reqCourtType || 'double';
 
@@ -1346,13 +1368,7 @@ app.get('/api/courts', async (req, res) => {
   const results = [];
   for (const loc of locations) {
     let isOutdoor = false;
-    if (loc === 'Suikerterrein') {
-      isOutdoor = true;
-    } else if (loc === 'Sloterdijk') {
-      isOutdoor = true;
-    } else if (loc === 'Kauwgombal') {
-      isOutdoor = true;
-    } else if (loc === 'Amstel') {
+    if (loc === 'Suikerterrein' || loc === 'Sloterdijk' || loc === 'Kauwgomballenkwartier' || loc === 'Olympiaplein' || loc === 'Malkenschoten' || loc === 'High Tech Campus') {
       isOutdoor = true;
     }
     let weatherInfo = null;
@@ -1361,9 +1377,11 @@ app.get('/api/courts', async (req, res) => {
       let coords = { lat: 53.2194, lon: 6.5665 };
       if (loc === 'Atoomweg') coords = { lat: 53.2278, lon: 6.5397 };
       else if (loc === 'Euroborg') coords = { lat: 53.2011, lon: 6.5829 };
-      else if (loc === 'Sloterdijk') coords = { lat: 52.3888, lon: 4.8398 }; // Amsterdam coordinates
-      else if (loc === 'Kauwgombal') coords = { lat: 52.3361, lon: 4.9089 };
-      else if (loc === 'Amstel') coords = { lat: 52.3275, lon: 4.9123 };
+      else if (loc === 'Sloterdijk') coords = { lat: 52.3888, lon: 4.8398 };
+      else if (loc === 'Kauwgomballenkwartier') coords = { lat: 52.3361, lon: 4.9089 };
+      else if (loc === 'Olympiaplein') coords = { lat: 52.3486, lon: 4.8726 };
+      else if (loc === 'Malkenschoten') coords = { lat: 52.1852, lon: 5.9734 };
+      else if (loc === 'High Tech Campus') coords = { lat: 51.4112, lon: 5.4608 };
 
       const cacheKey = `${coords.lat}_${coords.lon}_${date}`;
       const cached = weatherCache[cacheKey];
@@ -1423,7 +1441,17 @@ app.get('/api/courts', async (req, res) => {
       }
     }
 
-    const openSlots = times.filter(() => Math.random() > 0.4);
+    let availableTimes = [...times];
+    if (date === todayStr) {
+      availableTimes = times.filter(t => {
+        const [h, m] = t.split(':').map(Number);
+        return (h > currentHour) || (h === currentHour && m > currentMin);
+      });
+    } else if (date < todayStr) {
+      availableTimes = [];
+    }
+
+    const openSlots = availableTimes.filter(() => Math.random() > 0.4);
     openSlots.forEach(time => {
       results.push({
         location: `Peakz Padel ${loc}`,

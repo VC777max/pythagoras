@@ -1,11 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import { User, LogOut, Check, Sliders, ChevronDown } from 'lucide-react';
+import { translate } from '../utils/i18n';
 
-export default function SettingsScreen({ activePlayer, token, onLogout, onRefreshPlayer }) {
+export default function SettingsScreen({ activePlayer, token, onLogout, onRefreshPlayer, language, onChangeLanguage }) {
   const [name, setName] = useState(activePlayer.name);
   const [pin, setPin] = useState(activePlayer.pin);
   const [city, setCity] = useState(activePlayer.city || 'Groningen');
-  const [level, setLevel] = useState((10 - activePlayer.level).toString()); // Peakz Rating selector mapping
+  const [level, setLevel] = useState((10 - activePlayer.level).toString()); // Rating selector mapping
   const [position, setPosition] = useState(activePlayer.position || 'Beide');
   const [avatar, setAvatar] = useState(activePlayer.avatar || 'avatar_01');
   const [prefPlaytime, setPrefPlaytime] = useState(activePlayer.pref_playtime || 90);
@@ -17,10 +18,24 @@ export default function SettingsScreen({ activePlayer, token, onLogout, onRefres
 
   const [cityDropdown, setCityDropdown] = useState(false);
 
+  const t = (key) => translate(key, language);
+
   const CITIES_CLUBS = {
     Groningen: ['Atoomweg', 'Euroborg', 'Suikerterrein'],
-    Amsterdam: ['Sloterdijk', 'Kauwgombal', 'Amstel'],
-    Utrecht: ['Vechtsebanen', 'Utrecht West']
+    Amsterdam: ['Kauwgomballenkwartier', 'Olympiaplein', 'Sloterdijk', 'Zuidoost'],
+    Utrecht: ['Vechtsebanen', 'Zeehaenkade'],
+    Eindhoven: ['Beursgebouw', 'High Tech Campus', 'Vijfkamplaan'],
+    Apeldoorn: ['De Maten', 'Malkenschoten'],
+    Assen: ['Assen'],
+    Haarlem: ['Haarlem'],
+    Heemskerk: ['Heemskerk'],
+    Heerlen: ['Heerlen'],
+    Nijmegen: ['Nijmegen'],
+    Oisterwijk: ['Oisterwijk'],
+    Papendrecht: ['Papendrecht'],
+    Sittard: ['Sittard'],
+    Zutphen: ['Zutphen'],
+    Zwolle: ['Zwolle']
   };
 
   const avatarOptions = [
@@ -48,7 +63,7 @@ export default function SettingsScreen({ activePlayer, token, onLogout, onRefres
   const handleSave = async (e) => {
     e.preventDefault();
     if (!name.trim() || !pin.trim()) {
-      setErrorMsg('Name and PIN are required.');
+      setErrorMsg(t('fillAllFields'));
       return;
     }
     setLoading(true);
@@ -79,9 +94,9 @@ export default function SettingsScreen({ activePlayer, token, onLogout, onRefres
       });
       const data = await response.json();
       if (!response.ok) {
-        throw new Error(data.error || 'Failed to save settings');
+        throw new Error(data.error || t('saveError'));
       }
-      setSuccessMsg('Settings successfully saved!');
+      setSuccessMsg(t('saveSuccess'));
       onRefreshPlayer();
     } catch (err) {
       setErrorMsg(err.message);
@@ -99,13 +114,13 @@ export default function SettingsScreen({ activePlayer, token, onLogout, onRefres
         
         {/* Profile Card details */}
         <div className="glass-panel" style={{ padding: '16px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
-          <h3 style={{ fontSize: '14px', fontWeight: '800', borderBottom: '1px solid var(--color-border-glass)', paddingBottom: '8px', color: 'var(--color-primary)' }}>
-            PROFILE DETAILS
+          <h3 style={{ fontSize: '14px', fontWeight: '800', borderBottom: '1px solid rgba(255,255,255,0.06)', paddingBottom: '8px', color: 'var(--color-primary)' }}>
+            {t('profileDetails')}
           </h3>
           
           <div>
             <label style={{ display: 'block', fontSize: '10px', fontWeight: '700', color: 'var(--color-text-muted)', marginBottom: '4px', textTransform: 'uppercase' }}>
-              Name
+              {t('playerName')}
             </label>
             <input
               type="text"
@@ -118,7 +133,7 @@ export default function SettingsScreen({ activePlayer, token, onLogout, onRefres
 
           <div>
             <label style={{ display: 'block', fontSize: '10px', fontWeight: '700', color: 'var(--color-text-muted)', marginBottom: '4px', textTransform: 'uppercase' }}>
-              Pin code
+              {t('pinCode')}
             </label>
             <input
               type="password"
@@ -133,7 +148,7 @@ export default function SettingsScreen({ activePlayer, token, onLogout, onRefres
           {/* City dropdown */}
           <div style={{ position: 'relative' }}>
             <label style={{ display: 'block', fontSize: '10px', fontWeight: '700', color: 'var(--color-text-muted)', marginBottom: '4px', textTransform: 'uppercase' }}>
-              City
+              {t('city')}
             </label>
             <div
               onClick={() => setCityDropdown(!cityDropdown)}
@@ -153,9 +168,11 @@ export default function SettingsScreen({ activePlayer, token, onLogout, onRefres
                 marginTop: '4px',
                 background: 'var(--color-card-bg)',
                 borderRadius: '8px',
-                overflow: 'hidden'
+                overflowY: 'auto',
+                maxHeight: '220px',
+                border: '1px solid var(--color-border-glass)'
               }}>
-                {Object.keys(CITIES_CLUBS).map(c => (
+                {Object.keys(CITIES_CLUBS).sort().map(c => (
                   <div
                     key={c}
                     onClick={() => {
@@ -163,12 +180,12 @@ export default function SettingsScreen({ activePlayer, token, onLogout, onRefres
                       setCityDropdown(false);
                     }}
                     style={{
-                      padding: '12px 16px',
-                      fontSize: '14px',
+                      padding: '10px 16px',
+                      fontSize: '13px',
                       cursor: 'pointer',
                       background: city === c ? 'rgba(212,255,0,0.1)' : 'transparent',
                       color: city === c ? 'var(--color-primary)' : 'inherit',
-                      borderBottom: '1px solid var(--color-border-glass)'
+                      borderBottom: '1px solid rgba(255,255,255,0.03)'
                     }}
                   >
                     {c}
@@ -177,35 +194,73 @@ export default function SettingsScreen({ activePlayer, token, onLogout, onRefres
               </div>
             )}
           </div>
-        </div>
 
+          {/* Language Selection */}
+          <div>
+            <label style={{ display: 'block', fontSize: '10px', fontWeight: '700', color: 'var(--color-text-muted)', marginBottom: '6px', textTransform: 'uppercase' }}>
+              Language / Taal
+            </label>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '8px' }}>
+              <button
+                type="button"
+                onClick={() => onChangeLanguage('nl')}
+                className={`btn-secondary ${language === 'nl' ? 'active-pos' : ''}`}
+                style={{
+                  padding: '8px 0',
+                  fontSize: '12px',
+                  backgroundColor: language === 'nl' ? 'rgba(212, 255, 0, 0.1)' : 'transparent',
+                  borderColor: language === 'nl' ? 'var(--color-primary)' : 'var(--color-border-glass)',
+                  color: language === 'nl' ? 'var(--color-primary)' : 'var(--color-text-primary)'
+                }}
+              >
+                Nederlands
+              </button>
+              <button
+                type="button"
+                onClick={() => onChangeLanguage('en')}
+                className={`btn-secondary ${language === 'en' ? 'active-pos' : ''}`}
+                style={{
+                  padding: '8px 0',
+                  fontSize: '12px',
+                  backgroundColor: language === 'en' ? 'rgba(212, 255, 0, 0.1)' : 'transparent',
+                  borderColor: language === 'en' ? 'var(--color-primary)' : 'var(--color-border-glass)',
+                  color: language === 'en' ? 'var(--color-primary)' : 'var(--color-text-primary)'
+                }}
+              >
+                English
+              </button>
+            </div>
+          </div>
+
+        </div>
+ 
         {/* Play Preferences */}
         <div className="glass-panel" style={{ padding: '16px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
-          <h3 style={{ fontSize: '14px', fontWeight: '800', borderBottom: '1px solid var(--color-border-glass)', paddingBottom: '8px', color: 'var(--color-primary)' }}>
-            PLAY PREFERENCES
+          <h3 style={{ fontSize: '14px', fontWeight: '800', borderBottom: '1px solid rgba(255,255,255,0.06)', paddingBottom: '8px', color: 'var(--color-primary)' }}>
+            {t('playPreferences')}
           </h3>
 
           {/* Playtime */}
           <div>
             <label style={{ display: 'block', fontSize: '10px', fontWeight: '700', color: 'var(--color-text-muted)', marginBottom: '6px', textTransform: 'uppercase' }}>
-              Preferred Playtime
+              {t('preferredPlaytime')}
             </label>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '8px' }}>
-              {[60, 90, 120].map(t => (
+              {[60, 90, 120].map(tVal => (
                 <button
-                  key={t}
+                  key={tVal}
                   type="button"
-                  onClick={() => setPrefPlaytime(t)}
-                  className={`btn-secondary ${prefPlaytime === t ? 'active-pos' : ''}`}
+                  onClick={() => setPrefPlaytime(tVal)}
+                  className={`btn-secondary ${prefPlaytime === tVal ? 'active-pos' : ''}`}
                   style={{
                     padding: '8px 0',
                     fontSize: '12px',
-                    backgroundColor: prefPlaytime === t ? 'rgba(212, 255, 0, 0.1)' : 'transparent',
-                    borderColor: prefPlaytime === t ? 'var(--color-primary)' : 'var(--color-border-glass)',
-                    color: prefPlaytime === t ? 'var(--color-primary)' : 'var(--color-text-primary)'
+                    backgroundColor: prefPlaytime === tVal ? 'rgba(212, 255, 0, 0.1)' : 'transparent',
+                    borderColor: prefPlaytime === tVal ? 'var(--color-primary)' : 'var(--color-border-glass)',
+                    color: prefPlaytime === tVal ? 'var(--color-primary)' : 'var(--color-text-primary)'
                   }}
                 >
-                  {t} Min
+                  {tVal} {t('min')}
                 </button>
               ))}
             </div>
@@ -214,7 +269,7 @@ export default function SettingsScreen({ activePlayer, token, onLogout, onRefres
           {/* Court type */}
           <div>
             <label style={{ display: 'block', fontSize: '10px', fontWeight: '700', color: 'var(--color-text-muted)', marginBottom: '6px', textTransform: 'uppercase' }}>
-              Preferred Court Type
+              {t('preferredCourtType')}
             </label>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '8px' }}>
               {['single', 'double'].map(type => (
@@ -241,7 +296,7 @@ export default function SettingsScreen({ activePlayer, token, onLogout, onRefres
           {/* Avatar Color Picker */}
           <div>
             <label style={{ display: 'block', fontSize: '10px', fontWeight: '700', color: 'var(--color-text-muted)', marginBottom: '6px', textTransform: 'uppercase' }}>
-              Avatar Accent Color
+              {t('avatarAccent')}
             </label>
             <div style={{ display: 'flex', gap: '12px' }}>
               {avatarOptions.map(opt => (
@@ -271,7 +326,7 @@ export default function SettingsScreen({ activePlayer, token, onLogout, onRefres
           {availableClubs.length > 0 && (
             <div>
               <label style={{ display: 'block', fontSize: '10px', fontWeight: '700', color: 'var(--color-text-muted)', marginBottom: '6px', textTransform: 'uppercase' }}>
-                Preferred Clubs
+                {t('preferredClubs')}
               </label>
               <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
                 {availableClubs.map(club => {
@@ -292,7 +347,7 @@ export default function SettingsScreen({ activePlayer, token, onLogout, onRefres
                         fontSize: '13px'
                       }}
                     >
-                      <span>Peakz Padel {club}</span>
+                      <span>Padel Club {club}</span>
                       <div style={{
                         width: '18px',
                         height: '18px',
@@ -327,7 +382,7 @@ export default function SettingsScreen({ activePlayer, token, onLogout, onRefres
         )}
 
         <button type="submit" className="btn-primary" disabled={loading}>
-          {loading ? 'Saving...' : 'Save Settings'}
+          {loading ? t('saving') : t('saveSettings')}
         </button>
 
         <button
@@ -336,7 +391,7 @@ export default function SettingsScreen({ activePlayer, token, onLogout, onRefres
           className="btn-secondary"
           style={{ borderColor: 'var(--color-danger)', color: 'var(--color-danger)' }}
         >
-          <LogOut size={14} /> Log Out
+          <LogOut size={14} /> {t('logOut')}
         </button>
       </form>
       

@@ -1,11 +1,14 @@
 import React, { useState, useEffect } from 'react';
 import { Award, ShieldAlert, Trophy, TrendingUp, Sparkles } from 'lucide-react';
+import { translate } from '../utils/i18n';
 
-export default function LeaderboardScreen({ activePlayer }) {
+export default function LeaderboardScreen({ activePlayer, language }) {
   const [seasonInfo, setSeasonInfo] = useState(null);
   const [leaderboard, setLeaderboard] = useState([]);
   const [biggestClimber, setBiggestClimber] = useState(null);
   const [myBadges, setMyBadges] = useState([]);
+
+  const t = (key, replacements) => translate(key, language, replacements);
 
   // Map avatar IDs to initials color borders
   const avatarColors = {
@@ -90,7 +93,7 @@ export default function LeaderboardScreen({ activePlayer }) {
       <div className="glass-panel" style={{ padding: '16px' }}>
         <h3 style={{ fontSize: '14px', fontWeight: '800', marginBottom: '12px', display: 'flex', alignItems: 'center', gap: '6px' }}>
           <Sparkles size={15} style={{ color: 'var(--color-primary)' }} />
-          My Earned Badges
+          {t('earnedBadges')}
         </h3>
         
         {myBadges.length === 0 ? (
@@ -126,7 +129,7 @@ export default function LeaderboardScreen({ activePlayer }) {
       {/* Leaderboard Table */}
       <div>
         <h3 className="header-title" style={{ fontSize: '13px', color: 'var(--color-text-muted)', marginBottom: '10px' }}>
-          Season Rankings
+          {t('leaderboardSub')}
         </h3>
         
         <div className="glass-panel" style={{ padding: '8px', overflow: 'hidden' }}>
@@ -134,10 +137,10 @@ export default function LeaderboardScreen({ activePlayer }) {
             
             {/* Header Row */}
             <div style={{ display: 'flex', padding: '10px 8px', borderBottom: '1px solid var(--color-border-glass)', fontSize: '10px', fontWeight: '800', color: 'var(--color-text-muted)', textTransform: 'uppercase' }}>
-              <div style={{ width: '40px' }}>Rank</div>
-              <div style={{ flex: 1 }}>Player</div>
-              <div style={{ width: '80px', textAlign: 'right' }}>Peakz Rating</div>
-              <div style={{ width: '60px', textAlign: 'right' }}>Record</div>
+              <div style={{ width: '40px' }}>{t('rank')}</div>
+              <div style={{ flex: 1 }}>{t('player')}</div>
+              <div style={{ width: '80px', textAlign: 'right' }}>{t('rating')}</div>
+              <div style={{ width: '60px', textAlign: 'right' }}>{t('elo')}</div>
             </div>
 
             {/* Players Rows */}
@@ -180,7 +183,7 @@ export default function LeaderboardScreen({ activePlayer }) {
                     {getPeakzRating(player.elo_current || player.elo)}
                   </div>
                   <div style={{ width: '60px', textAlign: 'right', fontSize: '11px', color: 'var(--color-text-muted)' }}>
-                    {player.wins}W - {player.games_played - player.wins}L
+                    {player.elo_current || player.elo}
                   </div>
                 </div>
               );

@@ -1,16 +1,20 @@
 import React, { useState } from 'react';
 import { ShieldCheck, UserPlus, LogIn, Award } from 'lucide-react';
+import { translate } from '../utils/i18n';
 
-export default function LoginScreen({ onLoginSuccess }) {
+export default function LoginScreen({ onLoginSuccess, language, onChangeLanguage }) {
   const [isRegistering, setIsRegistering] = useState(false);
   const [name, setName] = useState('');
   const [pin, setPin] = useState('');
-  const [level, setLevel] = useState('7'); // Default Peakz rating 7 (maps to internal level 3)
+  const [level, setLevel] = useState('7'); // Default Padel rating 7
   const [position, setPosition] = useState('Beide');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [showForgotModal, setShowForgotModal] = useState(false);
 
-  // Peakz rating selections for registration
+  const t = (key) => translate(key, language);
+
+  // rating selections for registration
   const ratingOptions = [
     { value: '9', label: '9.0 - Absolute Beginner' },
     { value: '8', label: '8.0 - Advanced Beginner' },
@@ -26,7 +30,7 @@ export default function LoginScreen({ onLoginSuccess }) {
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (!name.trim() || !pin.trim()) {
-      setError('Please fill in all fields.');
+      setError(t('fillAllFields'));
       return;
     }
     setError('');
@@ -56,7 +60,39 @@ export default function LoginScreen({ onLoginSuccess }) {
   };
 
   return (
-    <div className="glass-panel" style={{ padding: '24px', width: '100%', marginTop: '40px' }}>
+    <div className="glass-panel" style={{ padding: '24px', width: '100%', marginTop: '40px', position: 'relative' }}>
+      
+      {/* Language Switcher in Login Screen top-right */}
+      <div style={{ position: 'absolute', top: '12px', right: '12px', display: 'flex', gap: '6px' }}>
+        <button
+          onClick={() => onChangeLanguage('nl')}
+          style={{
+            background: 'none',
+            border: 'none',
+            fontSize: '11px',
+            fontWeight: language === 'nl' ? '900' : '400',
+            color: language === 'nl' ? 'var(--color-primary)' : 'var(--color-text-muted)',
+            cursor: 'pointer'
+          }}
+        >
+          NL
+        </button>
+        <span style={{ fontSize: '11px', color: 'var(--color-text-muted)' }}>|</span>
+        <button
+          onClick={() => onChangeLanguage('en')}
+          style={{
+            background: 'none',
+            border: 'none',
+            fontSize: '11px',
+            fontWeight: language === 'en' ? '900' : '400',
+            color: language === 'en' ? 'var(--color-primary)' : 'var(--color-text-muted)',
+            cursor: 'pointer'
+          }}
+        >
+          EN
+        </button>
+      </div>
+
       <div style={{ textAlign: 'center', marginBottom: '24px' }}>
         <div className="pulse-primary" style={{
           width: '56px',
@@ -72,17 +108,17 @@ export default function LoginScreen({ onLoginSuccess }) {
           <ShieldCheck size={28} style={{ color: 'var(--color-primary)' }} />
         </div>
         <h2 className="header-title" style={{ fontSize: '20px', color: 'var(--color-text-primary)' }}>
-          {isRegistering ? 'Create Profile' : 'Player Access'}
+          {isRegistering ? t('loginHeaderCreate') : t('loginHeaderAccess')}
         </h2>
         <p style={{ fontSize: '12px', color: 'var(--color-text-muted)', marginTop: '4px' }}>
-          {isRegistering ? 'Setup your matchmaker profile' : 'Enter your name and PIN to log in'}
+          {isRegistering ? t('loginSubCreate') : t('loginSubAccess')}
         </p>
       </div>
 
       <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
         <div>
           <label style={{ display: 'block', fontSize: '11px', fontWeight: '700', color: 'var(--color-text-muted)', marginBottom: '6px', textTransform: 'uppercase' }}>
-            Player Name
+            {t('playerName')}
           </label>
           <input
             type="text"
@@ -95,9 +131,26 @@ export default function LoginScreen({ onLoginSuccess }) {
         </div>
 
         <div>
-          <label style={{ display: 'block', fontSize: '11px', fontWeight: '700', color: 'var(--color-text-muted)', marginBottom: '6px', textTransform: 'uppercase' }}>
-            Pin Code (4 digits)
-          </label>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
+            <label style={{ display: 'block', fontSize: '11px', fontWeight: '700', color: 'var(--color-text-muted)', textTransform: 'uppercase' }}>
+              {t('pinCode')}
+            </label>
+            <button
+              type="button"
+              onClick={() => setShowForgotModal(true)}
+              style={{
+                background: 'none',
+                border: 'none',
+                color: 'var(--color-primary)',
+                fontSize: '10px',
+                fontWeight: '700',
+                cursor: 'pointer',
+                textDecoration: 'underline'
+              }}
+            >
+              {t('forgotPin')}
+            </button>
+          </div>
           <input
             type="password"
             maxLength={4}
@@ -116,7 +169,7 @@ export default function LoginScreen({ onLoginSuccess }) {
           <>
             <div>
               <label style={{ display: 'block', fontSize: '11px', fontWeight: '700', color: 'var(--color-text-muted)', marginBottom: '6px', textTransform: 'uppercase' }}>
-                Peakz Rating (Skill)
+                {t('ratingLabel')}
               </label>
               <select
                 className="input-field"
@@ -132,7 +185,7 @@ export default function LoginScreen({ onLoginSuccess }) {
 
             <div>
               <label style={{ display: 'block', fontSize: '11px', fontWeight: '700', color: 'var(--color-text-muted)', marginBottom: '6px', textTransform: 'uppercase' }}>
-                Preferred Side
+                {t('preferredSide')}
               </label>
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '8px' }}>
                 {['Links', 'Rechts', 'Beide'].map(pos => (
@@ -175,14 +228,14 @@ export default function LoginScreen({ onLoginSuccess }) {
 
         <button type="submit" className="btn-primary" disabled={loading} style={{ marginTop: '8px' }}>
           {loading ? (
-            'Processing...'
+            t('processing')
           ) : isRegistering ? (
             <>
-              <UserPlus size={16} /> Register Profile
+              <UserPlus size={16} /> {t('registerButton')}
             </>
           ) : (
             <>
-              <LogIn size={16} /> Log In
+              <LogIn size={16} /> {t('loginButton')}
             </>
           )}
         </button>
@@ -205,10 +258,43 @@ export default function LoginScreen({ onLoginSuccess }) {
             }}
             disabled={loading}
           >
-            {isRegistering ? 'Already have a profile? Sign In' : 'New player? Create Profile'}
+            {isRegistering ? t('signInLink') : t('signUpLink')}
           </button>
         </div>
       </form>
+
+      {/* Forgot PIN Modal popup */}
+      {showForgotModal && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          width: '100vw',
+          height: '100vh',
+          background: 'rgba(0,0,0,0.6)',
+          backdropFilter: 'blur(8px)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 10000,
+          padding: '20px'
+        }}>
+          <div className="glass-panel" style={{ padding: '24px', maxWidth: '380px', width: '100%', textAlign: 'center' }}>
+            <h3 style={{ fontSize: '16px', fontWeight: '800', marginBottom: '12px' }}>{t('forgotPin')}</h3>
+            <p style={{ fontSize: '13px', color: 'var(--color-text-muted)', lineHeight: '1.6', marginBottom: '20px' }}>
+              {t('forgotPinMessage')}
+            </p>
+            <button
+              onClick={() => setShowForgotModal(false)}
+              className="btn-primary"
+              style={{ width: 'auto', padding: '8px 24px', margin: '0 auto' }}
+            >
+              {t('close')}
+            </button>
+          </div>
+        </div>
+      )}
+
     </div>
   );
 }

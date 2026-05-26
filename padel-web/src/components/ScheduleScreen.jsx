@@ -1,24 +1,36 @@
 import React, { useState, useEffect } from 'react';
-import { Clock, Plus, Trash2, CalendarDays } from 'lucide-react';
+import { Clock, Plus, Trash2, CalendarDays, CheckCircle2 } from 'lucide-react';
+import { translate } from '../utils/i18n';
 
-export default function ScheduleScreen({ activePlayer, token }) {
+export default function ScheduleScreen({ activePlayer, token, language }) {
   const [recurringAvails, setRecurringAvails] = useState([]);
   const [onceAvails, setOnceAvails] = useState([]);
   const [loading, setLoading] = useState(false);
+  const [showSaveToast, setShowSaveToast] = useState(false);
 
   // One-time slot fields
   const [onceDate, setOnceDate] = useState('');
   const [onceStart, setOnceStart] = useState('19:30');
   const [onceEnd, setOnceEnd] = useState('21:00');
 
+  const t = (key, replacements) => translate(key, language, replacements);
+
   const DAYS = ['maandag', 'dinsdag', 'woensdag', 'donderdag', 'vrijdag', 'zaterdag', 'zondag'];
-  const TIME_SLOTS = [
-    { start: '17:00', end: '18:30' },
-    { start: '18:00', end: '19:30' },
-    { start: '19:30', end: '21:00' },
-    { start: '20:00', end: '21:30' },
-    { start: '21:00', end: '22:30' }
-  ];
+  
+  // Generate 30-minute start times from 08:00 to 22:30
+  const START_TIMES = [];
+  for (let h = 8; h <= 22; h++) {
+    START_TIMES.push(`${String(h).padStart(2, '0')}:00`);
+    START_TIMES.push(`${String(h).padStart(2, '0')}:30`);
+  }
+
+  const addMinutesToTime = (timeStr, minutes) => {
+    const [h, m] = timeStr.split(':').map(Number);
+    const totalMinutes = h * 60 + m + minutes;
+    const newH = Math.floor(totalMinutes / 60) % 24;
+    const newM = totalMinutes % 60;
+    return `${String(newH).padStart(2, '0')}:${String(newM).padStart(2, '0')}`;
+  };
 
   const loadAvailability = async () => {
     if (!token) return;
@@ -42,19 +54,26 @@ export default function ScheduleScreen({ activePlayer, token }) {
     loadAvailability();
   }, [activePlayer.id, token]);
 
-  const isSlotSelected = (day, start, end) => {
-    return recurringAvails.some(a => a.day_name === day && a.start_time === start && a.end_time === end);
+  const triggerSaveToast = () => {
+    setShowSaveToast(true);
+    setTimeout(() => {
+      setShowSaveToast(false);
+    }, 2000);
   };
 
-  const handleToggleSlot = async (day, start, end) => {
+  const handleAddSlot = async (day, startTime) => {
     setLoading(true);
-    const selected = isSlotSelected(day, start, end);
-    let updatedSlots;
-    if (selected) {
-      updatedSlots = recurringAvails.filter(a => !(a.day_name === day && a.start_time === start));
-    } else {
-      updatedSlots = [...recurringAvails, { day_name: day, start_time: start, end_time: end, duration: 90 }];
-    }
+    const playtime = activePlayer.pref_playtime || 90;
+    const endTime = addMinutesToTime(startTime, playtime);
+    
+    const newSlot = {
+      day_name: day,
+      start_time: startTime,
+      end_time: endTime,
+      duration: playtime
+    };
+
+    const updatedSlots = [...recurringAvails, newSlot];
 
     try {
       const response = await fetch(`/api/players/${activePlayer.id}/availability`, {
@@ -67,6 +86,31 @@ export default function ScheduleScreen({ activePlayer, token }) {
       });
       if (response.ok) {
         await loadAvailability();
+        triggerSaveToast();
+      }
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleRemoveSlot = async (day, startTime) => {
+    setLoading(true);
+    const updatedSlots = recurringAvails.filter(a => !(a.day_name === day && a.start_time === startTime));
+
+    try {
+      const response = await fetch(`/api/players/${activePlayer.id}/availability`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify(updatedSlots)
+      });
+      if (response.ok) {
+        await loadAvailability();
+        triggerSaveToast();
       }
     } catch (e) {
       console.error(e);
@@ -83,7 +127,7 @@ export default function ScheduleScreen({ activePlayer, token }) {
       date: onceDate,
       start_time: onceStart,
       end_time: onceEnd,
-      duration: 90
+      duration: activePlayer.pref_playtime || 90
     };
     const updatedSlots = [...onceAvails, newSlot];
 
@@ -99,6 +143,7 @@ export default function ScheduleScreen({ activePlayer, token }) {
       if (response.ok) {
         setOnceDate('');
         await loadAvailability();
+        triggerSaveToast();
       }
     } catch (e) {
       console.error(e);
@@ -118,6 +163,7 @@ export default function ScheduleScreen({ activePlayer, token }) {
       });
       if (response.ok) {
         await loadAvailability();
+        triggerSaveToast();
       }
     } catch (e) {
       console.error(e);
@@ -125,67 +171,145 @@ export default function ScheduleScreen({ activePlayer, token }) {
   };
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '20px', position: 'relative' }}>
       
+      {/* Floating Save Toast */}
+      {showSaveToast && (
+        <div style={{
+          position: 'fixed',
+          top: '20px',
+          left: '50%',
+          transform: 'translateX(-50%)',
+          background: 'rgba(71, 255, 117, 0.95)',
+          color: 'var(--color-bg-dark)',
+          fontWeight: '800',
+          fontSize: '12px',
+          padding: '10px 20px',
+          borderRadius: '50px',
+          display: 'flex',
+          alignItems: 'center',
+          gap: '8px',
+          boxShadow: '0 8px 32px rgba(71, 255, 117, 0.3)',
+          zIndex: 1000,
+          pointerEvents: 'none',
+          animation: 'fadeIn 0.2s ease'
+        }}>
+          <CheckCircle2 size={16} />
+          {t('autoSaved')}
+        </div>
+      )}
+
       {/* Weekly availability */}
       <div className="glass-panel" style={{ padding: '16px' }}>
         <h3 style={{ fontSize: '15px', fontWeight: '800', marginBottom: '4px', display: 'flex', alignItems: 'center', gap: '6px' }}>
-          <Clock size={16} /> Weekly Availability
+          <Clock size={16} /> {t('weeklyAvailTitle')}
         </h3>
         <p style={{ fontSize: '11px', color: 'var(--color-text-muted)', marginBottom: '16px' }}>
-          Set your recurring weekly play times slots. Matchmaker runs automatically on overlaps.
+          {t('weeklyAvailSub')}
         </p>
 
         <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
-          {DAYS.map(day => (
-            <div key={day} style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-              <span style={{ fontSize: '11px', fontWeight: '800', color: 'var(--color-text-muted)', textTransform: 'uppercase' }}>
-                {day}
-              </span>
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
-                {TIME_SLOTS.map(slot => {
-                  const active = isSlotSelected(day, slot.start, slot.end);
-                  return (
-                    <button
-                      key={slot.start}
-                      onClick={() => handleToggleSlot(day, slot.start, slot.end)}
-                      disabled={loading}
-                      style={{
-                        padding: '6px 12px',
-                        borderRadius: '6px',
-                        border: '1px solid',
-                        borderColor: active ? 'var(--color-primary)' : 'var(--color-border-glass)',
-                        background: active ? 'rgba(212, 255, 0, 0.1)' : 'rgba(0,0,0,0.15)',
-                        color: active ? 'var(--color-primary)' : 'var(--color-text-primary)',
-                        fontSize: '11px',
-                        fontWeight: '700',
-                        cursor: 'pointer',
-                        transition: 'all 0.15s ease'
-                      }}
-                    >
-                      {slot.start}
-                    </button>
-                  );
-                })}
+          {DAYS.map(day => {
+            const daySlots = recurringAvails.filter(a => a.day_name === day).sort((a, b) => a.start_time.localeCompare(b.start_time));
+            return (
+              <div key={day} style={{ display: 'flex', flexDirection: 'column', gap: '6px', borderBottom: '1px solid rgba(255,255,255,0.03)', paddingBottom: '10px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <span style={{ fontSize: '11px', fontWeight: '800', color: 'var(--color-text-muted)', textTransform: 'uppercase' }}>
+                    {day}
+                  </span>
+                  
+                  {/* Inline Add dropdown */}
+                  <select
+                    onChange={(e) => {
+                      if (e.target.value) {
+                        handleAddSlot(day, e.target.value);
+                        e.target.value = ''; // reset select
+                      }
+                    }}
+                    disabled={loading}
+                    className="input-field"
+                    style={{
+                      width: 'auto',
+                      padding: '4px 10px',
+                      fontSize: '10px',
+                      height: 'auto',
+                      cursor: 'pointer',
+                      border: '1px solid var(--color-border-glass)',
+                      background: 'rgba(255,255,255,0.04)'
+                    }}
+                  >
+                    <option value="">+ {t('addSlot')}</option>
+                    {START_TIMES.map(tStr => {
+                      const isSelected = daySlots.some(s => s.start_time === tStr);
+                      if (isSelected) return null;
+                      return <option key={tStr} value={tStr}>{tStr}</option>;
+                    })}
+                  </select>
+                </div>
+
+                {/* Selected Slots List */}
+                {daySlots.length === 0 ? (
+                  <span style={{ fontSize: '11px', color: 'var(--color-text-muted)', fontStyle: 'italic', paddingLeft: '4px' }}>
+                    -
+                  </span>
+                ) : (
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', marginTop: '4px' }}>
+                    {daySlots.map(slot => (
+                      <div
+                        key={slot.start_time}
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '6px',
+                          padding: '4px 10px',
+                          borderRadius: '6px',
+                          border: '1px solid var(--color-primary)',
+                          background: 'rgba(212, 255, 0, 0.08)',
+                          color: 'var(--color-primary)',
+                          fontSize: '11px',
+                          fontWeight: '800'
+                        }}
+                      >
+                        <span>{slot.start_time} - {slot.end_time}</span>
+                        <button
+                          onClick={() => handleRemoveSlot(day, slot.start_time)}
+                          disabled={loading}
+                          style={{
+                            background: 'none',
+                            border: 'none',
+                            color: 'var(--color-primary)',
+                            cursor: 'pointer',
+                            display: 'flex',
+                            padding: 0,
+                            alignItems: 'center',
+                            opacity: 0.8
+                          }}
+                        >
+                          <Trash2 size={12} />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       </div>
 
       {/* Date specific / one-time availability */}
       <div className="glass-panel" style={{ padding: '16px' }}>
         <h3 style={{ fontSize: '15px', fontWeight: '800', marginBottom: '4px', display: 'flex', alignItems: 'center', gap: '6px' }}>
-          <CalendarDays size={16} /> Specific Date Availability
+          <CalendarDays size={16} /> {t('specificAvailTitle')}
         </h3>
         <p style={{ fontSize: '11px', color: 'var(--color-text-muted)', marginBottom: '16px' }}>
-          Add temporary availability for a specific day only (e.g. holiday play).
+          {t('specificAvailSub')}
         </p>
 
         {/* Add Slot Form */}
         <form onSubmit={handleAddOnceSlot} style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr 1fr auto', gap: '8px', alignItems: 'end', marginBottom: '16px' }}>
           <div>
-            <label style={{ display: 'block', fontSize: '9px', fontWeight: '700', color: 'var(--color-text-muted)', marginBottom: '4px', textTransform: 'uppercase' }}>Date</label>
+            <label style={{ display: 'block', fontSize: '9px', fontWeight: '700', color: 'var(--color-text-muted)', marginBottom: '4px', textTransform: 'uppercase' }}>{t('date')}</label>
             <input
               type="date"
               className="input-field"
@@ -196,7 +320,7 @@ export default function ScheduleScreen({ activePlayer, token }) {
             />
           </div>
           <div>
-            <label style={{ display: 'block', fontSize: '9px', fontWeight: '700', color: 'var(--color-text-muted)', marginBottom: '4px', textTransform: 'uppercase' }}>Start</label>
+            <label style={{ display: 'block', fontSize: '9px', fontWeight: '700', color: 'var(--color-text-muted)', marginBottom: '4px', textTransform: 'uppercase' }}>{t('start')}</label>
             <input
               type="time"
               className="input-field"
@@ -207,7 +331,7 @@ export default function ScheduleScreen({ activePlayer, token }) {
             />
           </div>
           <div>
-            <label style={{ display: 'block', fontSize: '9px', fontWeight: '700', color: 'var(--color-text-muted)', marginBottom: '4px', textTransform: 'uppercase' }}>End</label>
+            <label style={{ display: 'block', fontSize: '9px', fontWeight: '700', color: 'var(--color-text-muted)', marginBottom: '4px', textTransform: 'uppercase' }}>{t('end')}</label>
             <input
               type="time"
               className="input-field"
@@ -225,7 +349,7 @@ export default function ScheduleScreen({ activePlayer, token }) {
         {/* List of Once Slots */}
         {onceAvails.length === 0 ? (
           <p style={{ fontSize: '11px', color: 'var(--color-text-muted)', textAlign: 'center', padding: '10px 0' }}>
-            No date-specific slots added.
+            {t('noSpecificSlots')}
           </p>
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
