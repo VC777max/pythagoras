@@ -1,0 +1,18 @@
+version: '3.8'
+
+services:
+  padel-backend:
+    build: .
+    container_name: padel-matcher-api
+    restart: always
+    ports:
+      - "3000:3000"
+    volumes:
+      - padel_data:/data
+    environment:
+      - PORT=3000
+      - NODE_ENV=production
+      - DATABASE_PATH=/data/padel_planner.db
+
+volumes:
+  padel_data:
