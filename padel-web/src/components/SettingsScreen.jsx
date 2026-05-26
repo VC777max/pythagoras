@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { User, LogOut, Check, Sliders, ChevronDown, Search, ShieldAlert, Trash2, Key, X, Plus, BarChart2 } from 'lucide-react';
+import React, { useState, useEffect, useCallback } from 'react';
+import { User, LogOut, Check, Sliders, ChevronDown, Search, ShieldAlert, Trash2, Key, X, Plus, BarChart2, Users, UserPlus, UserMinus, Wifi } from 'lucide-react';
 import { translate } from '../utils/i18n';
 
 // ─── Speelsterkte Rating Calculator Logic ──────────────────────────────────
@@ -64,6 +64,14 @@ export default function SettingsScreen({ activePlayer, token, onLogout, onRefres
 
   const [cityDropdown, setCityDropdown] = useState(false);
 
+  // Friends & Match Mode states
+  const [matchMode, setMatchMode] = useState(activePlayer.match_mode || 'open');
+  const [friendsList, setFriendsList] = useState([]);
+  const [friendSearch, setFriendSearch] = useState('');
+  const [friendSearchResults, setFriendSearchResults] = useState([]);
+  const [friendSearchLoading, setFriendSearchLoading] = useState(false);
+  const [friendMsg, setFriendMsg] = useState('');
+
   const t = (key) => translate(key, language);
 
   const CITIES_CLUBS = {
@@ -106,6 +114,62 @@ export default function SettingsScreen({ activePlayer, token, onLogout, onRefres
     }
   };
 
+  // ── Friends API helpers ─────────────────────────────────────────────────
+  const loadFriends = useCallback(async () => {
+    try {
+      const res = await fetch('/api/friends', { headers: { 'Authorization': `Bearer ${token}` } });
+      if (res.ok) setFriendsList(await res.json());
+    } catch (e) { console.error(e); }
+  }, [token]);
+
+  useEffect(() => { loadFriends(); }, [loadFriends]);
+
+  const handleFriendSearch = async (query) => {
+    setFriendSearch(query);
+    if (query.trim().length < 1) { setFriendSearchResults([]); return; }
+    setFriendSearchLoading(true);
+    try {
+      const res = await fetch(`/api/players/search?q=${encodeURIComponent(query)}`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (res.ok) setFriendSearchResults(await res.json());
+    } catch (e) { console.error(e); }
+    setFriendSearchLoading(false);
+  };
+
+  const handleAddFriend = async (friendId) => {
+    try {
+      const res = await fetch('/api/friends', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+        body: JSON.stringify({ friend_id: friendId })
+      });
+      if (res.ok) {
+        setFriendMsg(t('friendAdded'));
+        setFriendSearch('');
+        setFriendSearchResults([]);
+        loadFriends();
+        setTimeout(() => setFriendMsg(''), 2500);
+      }
+    } catch (e) { console.error(e); }
+  };
+
+  const handleRemoveFriend = async (friendId) => {
+    try {
+      const res = await fetch(`/api/friends/${friendId}`, {
+        method: 'DELETE',
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (res.ok) {
+        setFriendMsg(t('friendRemoved'));
+        loadFriends();
+        setTimeout(() => setFriendMsg(''), 2500);
+      }
+    } catch (e) { console.error(e); }
+  };
+  // ────────────────────────────────────────────────────────────────────────
+
+
   const handleSave = async (e) => {
     e.preventDefault();
     if (!name.trim() || !pin.trim()) {
@@ -135,7 +199,8 @@ export default function SettingsScreen({ activePlayer, token, onLogout, onRefres
           preferred_clubs: preferredClubs,
           avatar,
           pref_playtime: parseInt(prefPlaytime),
-          pref_court_type: prefCourtType
+          pref_court_type: prefCourtType,
+          match_mode: matchMode
         })
       });
       const data = await response.json();
@@ -798,9 +863,171 @@ export default function SettingsScreen({ activePlayer, token, onLogout, onRefres
           </div>
 
         </div>
- 
+
+        {/* ── Match Mode Toggle ── */}
+        <div className="glass-panel" style={{ padding: '16px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
+          <h3 style={{ fontSize: '14px', fontWeight: '800', borderBottom: '1px solid rgba(255,255,255,0.06)', paddingBottom: '8px', color: 'var(--color-primary)' }}>
+            {t('matchModeLabel')}
+          </h3>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+            {[
+              { value: 'friends', icon: <Users size={16} />, label: t('matchModeFriends'), sub: t('matchModeFriendsSub') },
+              { value: 'open', icon: <Wifi size={16} />, label: t('matchModeOpen'), sub: t('matchModeOpenSub') }
+            ].map(opt => {
+              const active = matchMode === opt.value;
+              return (
+                <button
+                  key={opt.value}
+                  type="button"
+                  onClick={() => setMatchMode(opt.value)}
+                  style={{
+                    padding: '12px',
+                    borderRadius: '10px',
+                    border: `1px solid ${active ? 'var(--color-primary)' : 'var(--color-border-glass)'}`,
+                    background: active ? 'rgba(212,255,0,0.07)' : 'rgba(255,255,255,0.02)',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    alignItems: 'flex-start',
+                    gap: '4px',
+                    transition: 'all 0.15s ease',
+                    textAlign: 'left'
+                  }}
+                >
+                  <span style={{ color: active ? 'var(--color-primary)' : 'var(--color-text-muted)', display: 'flex', alignItems: 'center', gap: '6px', fontWeight: '700', fontSize: '12px' }}>
+                    {opt.icon} {opt.label}
+                  </span>
+                  <span style={{ fontSize: '10px', color: 'var(--color-text-muted)', lineHeight: '1.4' }}>{opt.sub}</span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* ── Friends Section ── */}
+        <div className="glass-panel" style={{ padding: '16px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', borderBottom: '1px solid rgba(255,255,255,0.06)', paddingBottom: '10px' }}>
+            <Users size={16} style={{ color: 'var(--color-primary)' }} />
+            <h3 style={{ fontSize: '14px', fontWeight: '800', color: 'var(--color-primary)', margin: 0 }}>
+              {t('friendsTitle')}
+            </h3>
+            {friendsList.length > 0 && (
+              <span style={{ marginLeft: 'auto', fontSize: '10px', background: 'rgba(212,255,0,0.1)', border: '1px solid rgba(212,255,0,0.2)', borderRadius: '10px', padding: '2px 8px', color: 'var(--color-primary)', fontWeight: '700' }}>
+                {friendsList.length}
+              </span>
+            )}
+          </div>
+
+          {/* Success/info msg */}
+          {friendMsg && (
+            <div style={{ background: 'rgba(71,255,117,0.08)', border: '1px solid rgba(71,255,117,0.3)', borderRadius: '6px', color: '#47ff75', fontSize: '11px', padding: '8px 12px', textAlign: 'center' }}>
+              {friendMsg}
+            </div>
+          )}
+
+          {/* Search to add */}
+          <div style={{ position: 'relative' }}>
+            <Search size={13} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: 'var(--color-text-muted)', pointerEvents: 'none' }} />
+            <input
+              type="text"
+              placeholder={t('searchPlayers')}
+              value={friendSearch}
+              onChange={e => handleFriendSearch(e.target.value)}
+              style={{ ...inputStyle, paddingLeft: '34px' }}
+            />
+          </div>
+
+          {/* Search results dropdown */}
+          {friendSearchResults.length > 0 && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+              {friendSearchResults.map(p => {
+                const alreadyFriend = friendsList.some(f => f.id === p.id);
+                return (
+                  <div key={p.id} style={{
+                    display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                    padding: '8px 12px',
+                    background: 'rgba(255,255,255,0.03)',
+                    border: '1px solid var(--color-border-glass)',
+                    borderRadius: '8px'
+                  }}>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '1px' }}>
+                      <span style={{ fontSize: '13px', fontWeight: '700' }}>{p.name}</span>
+                      <span style={{ fontSize: '10px', color: 'var(--color-text-muted)' }}>{p.city} · ★ {p.padel_rating}</span>
+                    </div>
+                    {alreadyFriend ? (
+                      <span style={{ fontSize: '10px', color: 'var(--color-text-muted)', fontStyle: 'italic' }}>✓ {language === 'nl' ? 'Al vriend' : 'Already added'}</span>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => handleAddFriend(p.id)}
+                        style={{
+                          display: 'flex', alignItems: 'center', gap: '4px',
+                          padding: '5px 10px', borderRadius: '6px', cursor: 'pointer',
+                          background: 'rgba(212,255,0,0.08)', border: '1px solid rgba(212,255,0,0.3)',
+                          color: 'var(--color-primary)', fontSize: '11px', fontWeight: '700'
+                        }}
+                      >
+                        <UserPlus size={12} /> {t('addFriend')}
+                      </button>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+
+          {/* Current friends list */}
+          {friendsList.length === 0 ? (
+            <div style={{ textAlign: 'center', color: 'var(--color-text-muted)', fontSize: '12px', padding: '16px 0' }}>
+              {t('noFriends')}
+            </div>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+              {friendsList.map(f => (
+                <div key={f.id} style={{
+                  display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                  padding: '10px 12px',
+                  background: 'rgba(255,255,255,0.03)',
+                  border: '1px solid var(--color-border-glass)',
+                  borderRadius: '8px'
+                }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                    {/* Live indicator */}
+                    <div style={{
+                      width: '8px', height: '8px', borderRadius: '50%',
+                      background: f.available_now ? '#47ff75' : 'rgba(255,255,255,0.2)',
+                      boxShadow: f.available_now ? '0 0 6px #47ff75' : 'none',
+                      flexShrink: 0
+                    }} />
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '1px' }}>
+                      <span style={{ fontSize: '13px', fontWeight: '700', color: 'var(--color-text-primary)' }}>{f.name}</span>
+                      <span style={{ fontSize: '10px', color: 'var(--color-text-muted)' }}>
+                        {f.city} · ★ {f.padel_rating}
+                        {f.available_now ? <span style={{ color: '#47ff75', marginLeft: '6px', fontWeight: '700' }}>● LIVE</span> : ''}
+                      </span>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => handleRemoveFriend(f.id)}
+                    style={{
+                      display: 'flex', alignItems: 'center', gap: '4px',
+                      padding: '5px 10px', borderRadius: '6px', cursor: 'pointer',
+                      background: 'rgba(255,71,71,0.06)', border: '1px solid rgba(255,71,71,0.25)',
+                      color: 'var(--color-danger)', fontSize: '11px'
+                    }}
+                  >
+                    <UserMinus size={12} /> {t('removeFriend')}
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
         {/* Play Preferences */}
         <div className="glass-panel" style={{ padding: '16px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
+
           <h3 style={{ fontSize: '14px', fontWeight: '800', borderBottom: '1px solid rgba(255,255,255,0.06)', paddingBottom: '8px', color: 'var(--color-primary)' }}>
             {t('playPreferences')}
           </h3>

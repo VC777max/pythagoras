@@ -151,6 +151,7 @@ try { db.prepare("ALTER TABLE players ADD COLUMN available_now INTEGER NOT NULL 
 try { db.prepare("ALTER TABLE players ADD COLUMN pref_playtime INTEGER NOT NULL DEFAULT 90").run(); } catch(e) {}
 try { db.prepare("ALTER TABLE players ADD COLUMN pref_court_type TEXT NOT NULL DEFAULT 'double'").run(); } catch(e) {}
 try { db.prepare("ALTER TABLE notifications ADD COLUMN link_id TEXT").run(); } catch(e) {}
+try { db.prepare("ALTER TABLE players ADD COLUMN match_mode TEXT NOT NULL DEFAULT 'open'").run(); console.log("Added column 'match_mode' to players."); } catch(e) {}
 
 
 // Create indexes to optimize matchmaking and queries
@@ -166,7 +167,7 @@ db.prepare(`
   WHERE elo = 1200 AND sessions > 0
 `).run();
 
-// Badges table
+// Badges, notifications, friends tables
 db.exec(`
   CREATE TABLE IF NOT EXISTS badges (
     id TEXT PRIMARY KEY,
@@ -174,6 +175,16 @@ db.exec(`
     badge_id TEXT NOT NULL,
     earned_at TEXT NOT NULL DEFAULT (datetime('now')),
     FOREIGN KEY (player_id) REFERENCES players (id) ON DELETE CASCADE
+  );
+
+  -- Friends list (unidirectional: player_id has added friend_id)
+  CREATE TABLE IF NOT EXISTS friends (
+    player_id TEXT NOT NULL,
+    friend_id TEXT NOT NULL,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    PRIMARY KEY (player_id, friend_id),
+    FOREIGN KEY (player_id) REFERENCES players (id) ON DELETE CASCADE,
+    FOREIGN KEY (friend_id) REFERENCES players (id) ON DELETE CASCADE
   );
 
   CREATE TABLE IF NOT EXISTS notifications (

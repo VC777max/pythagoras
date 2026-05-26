@@ -145,7 +145,7 @@ app.post('/api/login', (req, res) => {
 
 app.get('/api/players', (req, res) => {
   try {
-    const players = db.prepare('SELECT id, name, level, position, sessions, hours, wins, games, avail_mode, city, preferred_clubs, elo, elo_peak, avatar, available_now FROM players').all();
+    const players = db.prepare('SELECT id, name, level, position, sessions, hours, wins, games, avail_mode, city, preferred_clubs, elo, elo_peak, avatar, available_now, match_mode FROM players').all();
     players.forEach(p => {
       p.preferred_clubs = JSON.parse(p.preferred_clubs || '[]');
       p.peakz_rating = getPeakzRating(p.elo);
@@ -206,7 +206,7 @@ app.post('/api/register', registerHandler);
 // Update player profile/settings
 app.put('/api/players/:id', authenticateToken, (req, res) => {
   const { id } = req.params;
-  const { name, level, position, pin, city, preferred_clubs, avatar, pref_playtime, pref_court_type } = req.body;
+  const { name, level, position, pin, city, preferred_clubs, avatar, pref_playtime, pref_court_type, match_mode } = req.body;
 
   if (!name || level === undefined || !pin || !city) {
     return res.status(400).json({ error: 'Name, level, pin, and city are required' });
@@ -225,6 +225,7 @@ app.put('/api/players/:id', authenticateToken, (req, res) => {
 
     const playtime = pref_playtime !== undefined ? parseInt(pref_playtime) : 90;
     const courtType = pref_court_type || 'double';
+    const matchModeVal = (match_mode === 'friends' || match_mode === 'open') ? match_mode : (playerExists.match_mode || 'open');
 
     // Hash PIN only if it was changed to a new 4-digit code
     let savedPin = pin;
@@ -245,9 +246,9 @@ app.put('/api/players/:id', authenticateToken, (req, res) => {
 
     db.prepare(`
       UPDATE players
-      SET name = ?, level = ?, position = ?, pin = ?, city = ?, preferred_clubs = ?, avatar = ?, pref_playtime = ?, pref_court_type = ?, elo = ?, elo_peak = ?
+      SET name = ?, level = ?, position = ?, pin = ?, city = ?, preferred_clubs = ?, avatar = ?, pref_playtime = ?, pref_court_type = ?, elo = ?, elo_peak = ?, match_mode = ?
       WHERE id = ?
-    `).run(name, dbLevel, position || playerExists.position, savedPin, city, JSON.stringify(preferred_clubs || []), avatar || 'avatar_01', playtime, courtType, eloVal, eloPeakVal, id);
+    `).run(name, dbLevel, position || playerExists.position, savedPin, city, JSON.stringify(preferred_clubs || []), avatar || 'avatar_01', playtime, courtType, eloVal, eloPeakVal, matchModeVal, id);
 
     const updatedPlayer = db.prepare('SELECT * FROM players WHERE id = ?').get(id);
     updatedPlayer.preferred_clubs = JSON.parse(updatedPlayer.preferred_clubs || '[]');
@@ -259,6 +260,7 @@ app.put('/api/players/:id', authenticateToken, (req, res) => {
     return res.status(500).json({ error: 'Database error' });
   }
 });
+
 
 // Helper: Create notification and log in-app alert
 function createNotification(playerId, message, type, linkId = null) {
@@ -283,6 +285,86 @@ const requireAdmin = (req, res, next) => {
   }
   next();
 };
+
+// ----------------------------------------
+// Friends Endpoints
+// ----------------------------------------
+
+// GET /api/friends — get your own friend list with online status
+app.get('/api/friends', authenticateToken, (req, res) => {
+  const playerId = req.user.id;
+  try {
+    const friends = db.prepare(`
+      SELECT p.id, p.name, p.level, p.city, p.avatar, p.elo, p.available_now, p.match_mode,
+             f.created_at
+      FROM friends f
+      JOIN players p ON p.id = f.friend_id
+      WHERE f.player_id = ?
+      ORDER BY p.name ASC
+    `).all(playerId);
+    friends.forEach(f => {
+      f.padel_rating = (10.0 - f.level).toFixed(1);
+    });
+    return res.json(friends);
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ error: 'Database error' });
+  }
+});
+
+// POST /api/friends — add a friend
+app.post('/api/friends', authenticateToken, (req, res) => {
+  const playerId = req.user.id;
+  const { friend_id } = req.body;
+  if (!friend_id) return res.status(400).json({ error: 'friend_id is required' });
+  if (friend_id === playerId) return res.status(400).json({ error: 'Cannot add yourself as a friend' });
+
+  try {
+    const friend = db.prepare('SELECT id FROM players WHERE id = ?').get(friend_id);
+    if (!friend) return res.status(404).json({ error: 'Player not found' });
+
+    db.prepare('INSERT OR IGNORE INTO friends (player_id, friend_id) VALUES (?, ?)').run(playerId, friend_id);
+    return res.status(201).json({ success: true, friend_id });
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ error: 'Database error' });
+  }
+});
+
+// DELETE /api/friends/:friend_id — remove a friend
+app.delete('/api/friends/:friend_id', authenticateToken, (req, res) => {
+  const playerId = req.user.id;
+  const { friend_id } = req.params;
+  try {
+    db.prepare('DELETE FROM friends WHERE player_id = ? AND friend_id = ?').run(playerId, friend_id);
+    return res.json({ success: true });
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ error: 'Database error' });
+  }
+});
+
+// GET /api/players/search?q=naam — search players to add as friend
+app.get('/api/players/search', authenticateToken, (req, res) => {
+  const playerId = req.user.id;
+  const q = (req.query.q || '').trim();
+  if (q.length < 1) return res.json([]);
+  try {
+    const results = db.prepare(`
+      SELECT id, name, level, city, avatar, elo, available_now
+      FROM players
+      WHERE id != ? AND name LIKE ?
+      LIMIT 15
+    `).all(playerId, `%${q}%`);
+    results.forEach(p => {
+      p.padel_rating = (10.0 - p.level).toFixed(1);
+    });
+    return res.json(results);
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ error: 'Database error' });
+  }
+});
 
 // ----------------------------------------
 // Admin Endpoints (Melvin Only)
@@ -1476,11 +1558,54 @@ app.post('/api/matches/urgent', authenticateToken, (req, res) => {
     // Set requester as available_now
     db.prepare('UPDATE players SET available_now = 1 WHERE id = ?').run(player_id);
 
-    // Find all other players who are available_now
-    const availableOthers = db.prepare(`
-      SELECT * FROM players 
-      WHERE available_now = 1 AND id != ? AND ABS(level - ?) <= 3
-    `).all(player_id, requester.level);
+    // force_open allows overriding friends mode for a single request
+    const forceOpen = req.body.force_open === true;
+    const matchMode = forceOpen ? 'open' : (requester.match_mode || 'open');
+
+    let availableOthers = [];
+
+    if (matchMode === 'friends') {
+      // --- FRIENDS MODE: only match with friends who are live ---
+      const friendIds = db.prepare('SELECT friend_id FROM friends WHERE player_id = ?')
+        .all(player_id)
+        .map(r => r.friend_id);
+
+      if (friendIds.length > 0) {
+        const placeholders = friendIds.map(() => '?').join(',');
+        availableOthers = db.prepare(`
+          SELECT * FROM players
+          WHERE available_now = 1
+            AND id IN (${placeholders})
+        `).all(...friendIds);
+      }
+
+      if (availableOthers.length < 3) {
+        const liveFriendCount = availableOthers.length;
+        return res.status(200).json({
+          success: false,
+          status: 'no_friends_available',
+          live_friend_count: liveFriendCount,
+          message: `Slechts ${liveFriendCount} vriend(en) live. Minimaal 3 vrienden nodig voor een vrienden-match.`
+        });
+      }
+
+    } else {
+      // --- OPEN MODE: find anyone available at similar level, same city first ---
+      const sameCityOthers = db.prepare(`
+        SELECT * FROM players
+        WHERE available_now = 1 AND id != ? AND city = ? AND ABS(level - ?) <= 3
+      `).all(player_id, requester.city, requester.level);
+
+      if (sameCityOthers.length >= 3) {
+        availableOthers = sameCityOthers;
+      } else {
+        // Fallback: any city, wider level range
+        availableOthers = db.prepare(`
+          SELECT * FROM players
+          WHERE available_now = 1 AND id != ? AND ABS(level - ?) <= 5
+        `).all(player_id, requester.level);
+      }
+    }
 
     if (availableOthers.length >= 3) {
       // Sort to get players closest in level
@@ -1546,11 +1671,12 @@ app.post('/api/matches/urgent', authenticateToken, (req, res) => {
       transaction();
 
       // Notify the matched players
+      const modeLabel = matchMode === 'friends' ? 'Vrienden' : 'Open';
       try {
         selected.forEach(p => {
           createNotification(
             p.id,
-            `Urgent: Nieuw live wedstrijdvoorstel van ${startStr} tot ${endStr} bij ${commonClub.replace("Peakz Padel ", "Padel Club ")}!`,
+            `${modeLabel} Match gevonden! Vandaag ${startStr}–${endStr} bij ${commonClub.replace('Peakz Padel ', '')}. Accepteer of weiger.`,
             'proposal',
             matchId
           );
@@ -1561,6 +1687,7 @@ app.post('/api/matches/urgent', authenticateToken, (req, res) => {
 
       return res.status(201).json({
         success: true,
+        match_mode: matchMode,
         match: {
           id: matchId,
           date: dateStr,
@@ -1575,7 +1702,9 @@ app.post('/api/matches/urgent', authenticateToken, (req, res) => {
     } else {
       return res.status(200).json({
         success: false,
-        message: 'Looking for players... You have been marked as available now.'
+        status: 'searching',
+        match_mode: matchMode,
+        message: 'Zoeken naar spelers... Je bent live gezet.'
       });
     }
   } catch (err) {

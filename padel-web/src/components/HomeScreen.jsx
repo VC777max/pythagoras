@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Award, Calendar, Zap, CheckCircle2, User, ExternalLink, Link2, DollarSign } from 'lucide-react';
+import { Award, Calendar, Zap, CheckCircle2, User, ExternalLink, Link2, DollarSign, Users, Wifi } from 'lucide-react';
 import { translate } from '../utils/i18n';
 
 export default function HomeScreen({ activePlayer, token, onRefreshPlayer, language }) {
@@ -8,6 +8,8 @@ export default function HomeScreen({ activePlayer, token, onRefreshPlayer, langu
   const [claimingId, setClaimingId] = useState(null);
   const [tikkieUrl, setTikkieUrl] = useState('');
   const [confirmingId, setConfirmingId] = useState(null);
+  const [liveFriendCount, setLiveFriendCount] = useState(0);
+  const [noFriendsAvailable, setNoFriendsAvailable] = useState(false);
 
   const t = (key, replacements) => translate(key, language, replacements);
 
@@ -40,17 +42,29 @@ export default function HomeScreen({ activePlayer, token, onRefreshPlayer, langu
 
   const handleToggleUrgent = async () => {
     setUrgentLoading(true);
+    setNoFriendsAvailable(false);
     const newStatus = activePlayer.available_now === 1 ? 0 : 1;
     try {
-      const response = await fetch(`/api/players/${activePlayer.id}/available-now`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
-        },
-        body: JSON.stringify({ available: newStatus })
-      });
-      if (response.ok) {
+      if (newStatus === 1) {
+        // Going live — trigger matchmaker
+        const response = await fetch('/api/matches/urgent', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+          body: JSON.stringify({ player_id: activePlayer.id })
+        });
+        const data = await response.json();
+        if (data.status === 'no_friends_available') {
+          setNoFriendsAvailable(true);
+        }
+        onRefreshPlayer();
+        loadActiveMatches();
+      } else {
+        // Going offline
+        await fetch(`/api/players/${activePlayer.id}/available-now`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+          body: JSON.stringify({ available: 0 })
+        });
         onRefreshPlayer();
       }
     } catch (e) {
@@ -59,6 +73,24 @@ export default function HomeScreen({ activePlayer, token, onRefreshPlayer, langu
       setUrgentLoading(false);
     }
   };
+
+  // Load live friends count
+  useEffect(() => {
+    const fetchFriends = async () => {
+      if (!token) return;
+      try {
+        const res = await fetch('/api/friends', { headers: { 'Authorization': `Bearer ${token}` } });
+        if (res.ok) {
+          const friends = await res.json();
+          setLiveFriendCount(friends.filter(f => f.available_now).length);
+        }
+      } catch (e) { console.error(e); }
+    };
+    fetchFriends();
+    const interval = setInterval(fetchFriends, 15000);
+    return () => clearInterval(interval);
+  }, [token]);
+
 
   const handleClaimBooking = async (matchId) => {
     setClaimingId(matchId);
@@ -157,6 +189,17 @@ export default function HomeScreen({ activePlayer, token, onRefreshPlayer, langu
             <p style={{ fontSize: '11px', color: 'var(--color-text-muted)', marginTop: '2px', lineHeight: '1.4' }}>
               {t('liveHourSub', { city: activePlayer.city })}
             </p>
+            {/* Match mode indicator */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginTop: '6px' }}>
+              {activePlayer.match_mode === 'friends'
+                ? <><Users size={10} style={{ color: 'var(--color-primary)' }} /><span style={{ fontSize: '10px', color: 'var(--color-primary)', fontWeight: '700' }}>{t('matchModeFriends')}</span></>
+                : <><Wifi size={10} style={{ color: 'var(--color-text-muted)' }} /><span style={{ fontSize: '10px', color: 'var(--color-text-muted)' }}>{t('matchModeOpen')}</span></>}
+              {activePlayer.match_mode === 'friends' && liveFriendCount > 0 && (
+                <span style={{ fontSize: '10px', background: 'rgba(71,255,117,0.1)', border: '1px solid rgba(71,255,117,0.3)', borderRadius: '8px', padding: '1px 6px', color: '#47ff75' }}>
+                  {t('friendsOnline', { count: liveFriendCount })}
+                </span>
+              )}
+            </div>
           </div>
           <button
             onClick={handleToggleUrgent}
@@ -178,6 +221,54 @@ export default function HomeScreen({ activePlayer, token, onRefreshPlayer, langu
             {activePlayer.available_now === 1 ? t('liveHourActive') : t('liveHourGoLive')}
           </button>
         </div>
+
+        {/* No friends available fallback */}
+        {noFriendsAvailable && activePlayer.match_mode === 'friends' && (
+          <div style={{
+            marginTop: '12px',
+            padding: '12px',
+            background: 'rgba(255,165,0,0.06)',
+            border: '1px solid rgba(255,165,0,0.25)',
+            borderRadius: '8px',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '8px'
+          }}>
+            <p style={{ fontSize: '12px', color: '#ffb347', lineHeight: '1.5', margin: 0 }}>
+              {t('noFriendsAvailable', { count: liveFriendCount })}
+            </p>
+            <div style={{ display: 'flex', gap: '8px' }}>
+              <button
+                type="button"
+                onClick={async () => {
+                  setNoFriendsAvailable(false);
+                  setUrgentLoading(true);
+                  try {
+                    const res = await fetch('/api/matches/urgent', {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+                      body: JSON.stringify({ player_id: activePlayer.id, force_open: true })
+                    });
+                    await res.json();
+                    onRefreshPlayer();
+                    loadActiveMatches();
+                  } catch(e) { console.error(e); }
+                  setUrgentLoading(false);
+                }}
+                style={{ flex: 1, padding: '8px', borderRadius: '6px', border: '1px solid rgba(255,165,0,0.4)', background: 'rgba(255,165,0,0.1)', color: '#ffb347', fontSize: '11px', fontWeight: '700', cursor: 'pointer' }}
+              >
+                {t('switchToOpen')}
+              </button>
+              <button
+                type="button"
+                onClick={() => setNoFriendsAvailable(false)}
+                style={{ padding: '8px 12px', borderRadius: '6px', border: '1px solid var(--color-border-glass)', background: 'transparent', color: 'var(--color-text-muted)', fontSize: '11px', cursor: 'pointer' }}
+              >
+                {t('keepWaiting')}
+              </button>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Matches List */}

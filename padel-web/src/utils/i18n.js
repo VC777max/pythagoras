@@ -139,7 +139,25 @@ const translations = {
     qStrokes_opt1: "Comfortable with lobs and bandejas",
     qStrokes_opt2: "Master advanced smashes, viboras, and chiquitas",
     calcResult: "Your calculated Padel Rating is: {rating}",
-    useRating: "Apply Rating"
+    useRating: "Apply Rating",
+
+    // Friends & Match Mode
+    friendsTitle: "Friends",
+    addFriend: "Add Friend",
+    removeFriend: "Remove",
+    friendAdded: "Friend added!",
+    friendRemoved: "Removed from friends",
+    friendsOnline: "{count} friend(s) live",
+    noFriends: "No friends added yet.",
+    searchPlayers: "Search players by name...",
+    matchModeLabel: "Match Preference",
+    matchModeFriends: "Friends Match",
+    matchModeOpen: "Open Match",
+    matchModeFriendsSub: "Only match with your friends",
+    matchModeOpenSub: "Match with anyone at your level",
+    noFriendsAvailable: "Not enough friends live ({count}/3). Switch to Open Match?",
+    switchToOpen: "Match with everyone",
+    keepWaiting: "Keep waiting"
   },
   nl: {
     // Navigation
@@ -281,7 +299,25 @@ const translations = {
     qStrokes_opt1: "Beheers de lob en bandeja redelijk",
     qStrokes_opt2: "Beheers smashes, viboras en chiquitas met controle",
     calcResult: "Jouw berekende Padel Rating is: {rating}",
-    useRating: "Rating Toepassen"
+    useRating: "Rating Toepassen",
+
+    // Friends & Match Mode
+    friendsTitle: "Vrienden",
+    addFriend: "Toevoegen",
+    removeFriend: "Verwijderen",
+    friendAdded: "Vriend toegevoegd!",
+    friendRemoved: "Verwijderd uit vrienden",
+    friendsOnline: "{count} vriend(en) live",
+    noFriends: "Nog geen vrienden toegevoegd.",
+    searchPlayers: "Zoek spelers op naam...",
+    matchModeLabel: "Matchvoorkeur",
+    matchModeFriends: "Vrienden Match",
+    matchModeOpen: "Open Match",
+    matchModeFriendsSub: "Match alleen met jouw vrienden",
+    matchModeOpenSub: "Match met iedereen op jouw niveau",
+    noFriendsAvailable: "Niet genoeg vrienden live ({count}/3). Toch open matchen?",
+    switchToOpen: "Match met iedereen",
+    keepWaiting: "Blijf wachten"
   }
 };
 
