@@ -215,7 +215,7 @@ export default function ScheduleScreen({ activePlayer, token, language }) {
               <div key={day} style={{ display: 'flex', flexDirection: 'column', gap: '6px', borderBottom: '1px solid rgba(255,255,255,0.03)', paddingBottom: '10px' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                   <span style={{ fontSize: '11px', fontWeight: '800', color: 'var(--color-text-muted)', textTransform: 'uppercase' }}>
-                    {day}
+                    {t(`day_${day}`)}
                   </span>
                   
                   {/* Inline Add dropdown */}

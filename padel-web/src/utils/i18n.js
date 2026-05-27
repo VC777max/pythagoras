@@ -62,6 +62,15 @@ const translations = {
     preferredCourtType: "Preferred Court Type",
     saveSettings: "Save Settings",
 
+    // Day names (display labels; API keys remain Dutch)
+    day_maandag: "Monday",
+    day_dinsdag: "Tuesday",
+    day_woensdag: "Wednesday",
+    day_donderdag: "Thursday",
+    day_vrijdag: "Friday",
+    day_zaterdag: "Saturday",
+    day_zondag: "Sunday",
+
     // Courts Screen
     today: "Today",
     tomorrow: "Tomorrow",
@@ -241,6 +250,15 @@ const translations = {
     preferredPlaytime: "Voorkeur Speeltijd",
     preferredCourtType: "Voorkeur Baantype",
     saveSettings: "Instellingen Opslaan",
+
+    // Dagnamen
+    day_maandag: "Maandag",
+    day_dinsdag: "Dinsdag",
+    day_woensdag: "Woensdag",
+    day_donderdag: "Donderdag",
+    day_vrijdag: "Vrijdag",
+    day_zaterdag: "Zaterdag",
+    day_zondag: "Zondag",
 
     // Courts Screen
     today: "Vandaag",
