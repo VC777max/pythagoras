@@ -1557,8 +1557,8 @@ app.post('/api/matches/:id/score', authenticateToken, (req, res) => {
       return res.status(404).json({ error: 'Match not found' });
     }
 
-    if (match.status !== 'confirmed') {
-      return res.status(400).json({ error: 'Scores can only be submitted for confirmed matches' });
+    if (match.status !== 'confirmed' && match.status !== 'booked') {
+      return res.status(400).json({ error: 'Scores can only be submitted for confirmed or booked matches' });
     }
 
     const proposedTeams = JSON.parse(match.proposed_teams);

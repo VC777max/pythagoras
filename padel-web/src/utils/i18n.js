@@ -165,7 +165,17 @@ const translations = {
     matchModeOpenSub: "Match with anyone at your level",
     noFriendsAvailable: "Not enough friends live ({count}/3). Switch to Open Match?",
     switchToOpen: "Match with everyone",
-    keepWaiting: "Keep waiting"
+    keepWaiting: "Keep waiting",
+    enterScore: "Enter Score",
+    submitScore: "Submit Score",
+    cancel: "Cancel",
+    waitingForVerification: "Waiting for opponent verification...",
+    verifyOpponentScore: "Confirm Opponent's Score",
+    approve: "Approve",
+    reject: "Reject",
+    set1: "Set 1",
+    set2: "Set 2",
+    set3: "Set 3 (Super Tiebreak)"
   },
   nl: {
     // Navigation
@@ -333,7 +343,17 @@ const translations = {
     matchModeOpenSub: "Match met iedereen op jouw niveau",
     noFriendsAvailable: "Niet genoeg vrienden live ({count}/3). Toch open matchen?",
     switchToOpen: "Match met iedereen",
-    keepWaiting: "Blijf wachten"
+    keepWaiting: "Blijf wachten",
+    enterScore: "Uitslag Invoeren",
+    submitScore: "Uitslag Verzenden",
+    cancel: "Annuleren",
+    waitingForVerification: "Wachten op bevestiging tegenstander...",
+    verifyOpponentScore: "Bevestig Uitslag Tegenstander",
+    approve: "Goedkeuren",
+    reject: "Afkeuren",
+    set1: "Set 1",
+    set2: "Set 2",
+    set3: "Set 3 (Super Tiebreak)"
   }
 };
 

@@ -12,6 +12,18 @@ export default function HomeScreen({ activePlayer, token, onRefreshPlayer, langu
   const [noFriendsAvailable, setNoFriendsAvailable] = useState(false);
   const [liveDuration, setLiveDuration] = useState('');
 
+  // Score Entry States
+  const [enteringScoreMatchId, setEnteringScoreMatchId] = useState(null);
+  const [set1Team1, setSet1Team1] = useState('');
+  const [set1Team2, setSet1Team2] = useState('');
+  const [set2Team1, setSet2Team1] = useState('');
+  const [set2Team2, setSet2Team2] = useState('');
+  const [set3Team1, setSet3Team1] = useState('');
+  const [set3Team2, setSet3Team2] = useState('');
+  const [scoreError, setScoreError] = useState('');
+  const [submittingScoreId, setSubmittingScoreId] = useState(null);
+  const [verifyingMatchId, setVerifyingMatchId] = useState(null);
+
   const t = (key, replacements) => translate(key, language, replacements);
 
   // Helper to calculate Padel Rating from ELO
@@ -183,6 +195,109 @@ export default function HomeScreen({ activePlayer, token, onRefreshPlayer, langu
       console.error(e);
     } finally {
       setConfirmingId(null);
+    }
+  };
+
+  const handleSubmitScore = async (matchId) => {
+    const s1t1 = parseInt(set1Team1);
+    const s1t2 = parseInt(set1Team2);
+    const s2t1 = parseInt(set2Team1);
+    const s2t2 = parseInt(set2Team2);
+
+    if (isNaN(s1t1) || isNaN(s1t2) || isNaN(s2t1) || isNaN(s2t2)) {
+      setScoreError(language === 'nl' ? 'Vul minstens Set 1 en Set 2 in.' : 'Please fill in at least Set 1 and Set 2.');
+      return;
+    }
+
+    let team1Sets = 0;
+    let team2Sets = 0;
+    const sets = [];
+
+    if (s1t1 > s1t2) team1Sets++;
+    else if (s1t2 > s1t1) team2Sets++;
+    sets.push([s1t1, s1t2]);
+
+    if (s2t1 > s2t2) team1Sets++;
+    else if (s2t2 > s2t1) team2Sets++;
+    sets.push([s2t1, s2t2]);
+
+    const s3t1 = parseInt(set3Team1);
+    const s3t2 = parseInt(set3Team2);
+    if (!isNaN(s3t1) && !isNaN(s3t2)) {
+      if (s3t1 > s3t2) team1Sets++;
+      else if (s3t2 > s3t1) team2Sets++;
+      sets.push([s3t1, s3t2]);
+    } else if (team1Sets === 1 && team2Sets === 1) {
+      setScoreError(language === 'nl' ? 'Set 3 is verplicht bij een gelijke stand (1-1).' : 'Set 3 is required when sets are tied 1-1.');
+      return;
+    }
+
+    if (team1Sets === team2Sets) {
+      setScoreError(language === 'nl' ? 'Er moet een winnaar zijn.' : 'There must be a clear winning team.');
+      return;
+    }
+
+    setSubmittingScoreId(matchId);
+    setScoreError('');
+
+    try {
+      const response = await fetch(`/api/matches/${matchId}/score`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          submitted_by: activePlayer.id,
+          score: {
+            sets,
+            team1_games: team1Sets,
+            team2_games: team2Sets
+          }
+        })
+      });
+      if (response.ok) {
+        setEnteringScoreMatchId(null);
+        setSet1Team1('');
+        setSet1Team2('');
+        setSet2Team1('');
+        setSet2Team2('');
+        setSet3Team1('');
+        setSet3Team2('');
+        loadActiveMatches();
+      } else {
+        const data = await response.json();
+        setScoreError(data.error || 'Failed to submit score');
+      }
+    } catch (e) {
+      console.error(e);
+      setScoreError('Network error');
+    } finally {
+      setSubmittingScoreId(null);
+    }
+  };
+
+  const handleVerifyScore = async (matchId, approved) => {
+    setVerifyingMatchId(matchId);
+    try {
+      const response = await fetch(`/api/matches/${matchId}/verify`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          playerId: activePlayer.id,
+          approved
+        })
+      });
+      if (response.ok) {
+        loadActiveMatches();
+      }
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setVerifyingMatchId(null);
     }
   };
 
@@ -494,6 +609,200 @@ export default function HomeScreen({ activePlayer, token, onRefreshPlayer, langu
                         </button>
                       )}
                       {/* Tikkie button removed */}
+                    </div>
+                  )}
+
+                  {/* Score Submission & Verification Section */}
+                  {(match.status === 'booked' || match.status === 'confirmed') && (
+                    <div style={{ marginTop: '12px', borderTop: '1px solid rgba(255,255,255,0.06)', paddingTop: '12px' }}>
+                      {!match.score ? (
+                        /* No score submitted yet */
+                        enteringScoreMatchId === match.id ? (
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                            <div style={{ fontSize: '11px', fontWeight: '800', color: 'var(--color-primary)' }}>
+                              {t('enterScore')}
+                            </div>
+                            
+                            {/* Score Inputs */}
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                              {/* Set 1 */}
+                              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '10px' }}>
+                                <span style={{ fontSize: '11px', color: 'var(--color-text-muted)' }}>{t('set1')}</span>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                  <input
+                                    type="number"
+                                    min="0"
+                                    max="30"
+                                    placeholder="T1"
+                                    value={set1Team1}
+                                    onChange={(e) => setSet1Team1(e.target.value)}
+                                    style={{ width: '45px', padding: '6px', background: 'rgba(0,0,0,0.2)', border: '1px solid var(--color-border-glass)', borderRadius: '4px', color: '#fff', fontSize: '12px', textAlign: 'center' }}
+                                  />
+                                  <span style={{ fontSize: '11px', color: 'var(--color-text-muted)' }}>-</span>
+                                  <input
+                                    type="number"
+                                    min="0"
+                                    max="30"
+                                    placeholder="T2"
+                                    value={set1Team2}
+                                    onChange={(e) => setSet1Team2(e.target.value)}
+                                    style={{ width: '45px', padding: '6px', background: 'rgba(0,0,0,0.2)', border: '1px solid var(--color-border-glass)', borderRadius: '4px', color: '#fff', fontSize: '12px', textAlign: 'center' }}
+                                  />
+                                </div>
+                              </div>
+
+                              {/* Set 2 */}
+                              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '10px' }}>
+                                <span style={{ fontSize: '11px', color: 'var(--color-text-muted)' }}>{t('set2')}</span>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                  <input
+                                    type="number"
+                                    min="0"
+                                    max="30"
+                                    placeholder="T1"
+                                    value={set2Team1}
+                                    onChange={(e) => setSet2Team1(e.target.value)}
+                                    style={{ width: '45px', padding: '6px', background: 'rgba(0,0,0,0.2)', border: '1px solid var(--color-border-glass)', borderRadius: '4px', color: '#fff', fontSize: '12px', textAlign: 'center' }}
+                                  />
+                                  <span style={{ fontSize: '11px', color: 'var(--color-text-muted)' }}>-</span>
+                                  <input
+                                    type="number"
+                                    min="0"
+                                    max="30"
+                                    placeholder="T2"
+                                    value={set2Team2}
+                                    onChange={(e) => setSet2Team2(e.target.value)}
+                                    style={{ width: '45px', padding: '6px', background: 'rgba(0,0,0,0.2)', border: '1px solid var(--color-border-glass)', borderRadius: '4px', color: '#fff', fontSize: '12px', textAlign: 'center' }}
+                                  />
+                                </div>
+                              </div>
+
+                              {/* Set 3 */}
+                              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '10px' }}>
+                                <span style={{ fontSize: '11px', color: 'var(--color-text-muted)' }}>{t('set3')}</span>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                  <input
+                                    type="number"
+                                    min="0"
+                                    max="30"
+                                    placeholder="T1"
+                                    value={set3Team1}
+                                    onChange={(e) => setSet3Team1(e.target.value)}
+                                    style={{ width: '45px', padding: '6px', background: 'rgba(0,0,0,0.2)', border: '1px solid var(--color-border-glass)', borderRadius: '4px', color: '#fff', fontSize: '12px', textAlign: 'center' }}
+                                  />
+                                  <span style={{ fontSize: '11px', color: 'var(--color-text-muted)' }}>-</span>
+                                  <input
+                                    type="number"
+                                    min="0"
+                                    max="30"
+                                    placeholder="T2"
+                                    value={set3Team2}
+                                    onChange={(e) => setSet3Team2(e.target.value)}
+                                    style={{ width: '45px', padding: '6px', background: 'rgba(0,0,0,0.2)', border: '1px solid var(--color-border-glass)', borderRadius: '4px', color: '#fff', fontSize: '12px', textAlign: 'center' }}
+                                  />
+                                </div>
+                              </div>
+                            </div>
+
+                            {/* Error Msg */}
+                            {scoreError && (
+                              <div style={{ fontSize: '10px', color: 'var(--color-danger)', marginTop: '4px' }}>
+                                {scoreError}
+                              </div>
+                            )}
+
+                            {/* Actions */}
+                            <div style={{ display: 'flex', gap: '8px', marginTop: '4px' }}>
+                              <button
+                                type="button"
+                                className="btn-primary"
+                                onClick={() => handleSubmitScore(match.id)}
+                                disabled={submittingScoreId === match.id}
+                                style={{ flex: 1, padding: '6px 0', fontSize: '11px' }}
+                              >
+                                {t('submitScore')}
+                              </button>
+                              <button
+                                type="button"
+                                className="btn-secondary"
+                                onClick={() => {
+                                  setEnteringScoreMatchId(null);
+                                  setScoreError('');
+                                }}
+                                style={{ flex: 1, padding: '6px 0', fontSize: '11px' }}
+                              >
+                                {t('cancel')}
+                              </button>
+                            </div>
+                          </div>
+                        ) : (
+                          <button
+                            type="button"
+                            className="btn-secondary"
+                            onClick={() => {
+                              setEnteringScoreMatchId(match.id);
+                              setSet1Team1('');
+                              setSet1Team2('');
+                              setSet2Team1('');
+                              setSet2Team2('');
+                              setSet3Team1('');
+                              setSet3Team2('');
+                              setScoreError('');
+                            }}
+                            style={{ width: '100%', padding: '8px 0', fontSize: '11px' }}
+                          >
+                            {t('enterScore')}
+                          </button>
+                        )
+                      ) : (
+                        /* Score exists and is pending or confirmed */
+                        match.score.status === 'pending' && (
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                            <div style={{ fontSize: '11px', fontWeight: '800', color: '#ffb347', textAlign: 'center' }}>
+                              {language === 'nl' ? 'Ingevoerde Stand (bevestiging vereist):' : 'Submitted Score (verification pending):'}
+                            </div>
+                            <div style={{ display: 'flex', justifyItems: 'center', justifyContent: 'center', gap: '12px', fontSize: '13px', fontWeight: '900', background: 'rgba(0,0,0,0.15)', padding: '6px', borderRadius: '4px' }}>
+                              {match.score.sets.map((s, idx) => (
+                                <span key={idx} style={{ color: 'var(--color-text-primary)' }}>
+                                  {s[0]}-{s[1]}
+                                </span>
+                              ))}
+                            </div>
+                            
+                            {match.score.verify_by.includes(activePlayer.id) ? (
+                              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                                <div style={{ fontSize: '11px', color: 'var(--color-text-muted)', textAlign: 'center' }}>
+                                  {t('verifyOpponentScore')}
+                                </div>
+                                <div style={{ display: 'flex', gap: '8px' }}>
+                                  <button
+                                    type="button"
+                                    className="btn-primary"
+                                    onClick={() => handleVerifyScore(match.id, true)}
+                                    disabled={verifyingMatchId === match.id}
+                                    style={{ flex: 1, padding: '6px 0', fontSize: '11px', background: 'var(--color-primary)', color: '#0f111a' }}
+                                  >
+                                    {t('approve')}
+                                  </button>
+                                  <button
+                                    type="button"
+                                    className="btn-secondary"
+                                    onClick={() => handleVerifyScore(match.id, false)}
+                                    disabled={verifyingMatchId === match.id}
+                                    style={{ flex: 1, padding: '6px 0', fontSize: '11px', borderColor: 'var(--color-danger)', color: 'var(--color-danger)' }}
+                                  >
+                                    {t('reject')}
+                                  </button>
+                                </div>
+                              </div>
+                            ) : (
+                              <div style={{ fontSize: '11px', color: 'var(--color-text-muted)', textAlign: 'center', fontStyle: 'italic' }}>
+                                {t('waitingForVerification')}
+                              </div>
+                            )}
+                          </div>
+                        )
+                      )}
                     </div>
                   )}
 
