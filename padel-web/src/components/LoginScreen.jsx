@@ -176,19 +176,21 @@ export default function LoginScreen({ onLoginSuccess, language, onChangeLanguage
       </div>
 
       <div style={{ textAlign: 'center', marginBottom: '24px' }}>
-        <div className="pulse-primary" style={{
-          width: '56px',
-          height: '56px',
-          borderRadius: '50%',
-          background: 'rgba(212, 255, 0, 0.1)',
-          border: '2px solid var(--color-primary)',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          margin: '0 auto 12px auto'
-        }}>
-          <ShieldCheck size={28} style={{ color: 'var(--color-primary)' }} />
-        </div>
+        <img 
+          src="/logo.png" 
+          alt="Padel Matcher Logo" 
+          className="pulse-primary"
+          style={{
+            width: '64px',
+            height: '64px',
+            borderRadius: '50%',
+            border: '2px solid var(--color-primary)',
+            boxShadow: '0 0 15px rgba(212, 255, 0, 0.3)',
+            objectFit: 'cover',
+            margin: '0 auto 12px auto',
+            display: 'block'
+          }} 
+        />
         <h2 className="header-title" style={{ fontSize: '20px', color: 'var(--color-text-primary)' }}>
           {isRegistering ? t('loginHeaderCreate') : t('loginHeaderAccess')}
         </h2>
