@@ -116,8 +116,11 @@ export default function LoginScreen({ onLoginSuccess, language, onChangeLanguage
     setLoading(true);
 
     const url = isRegistering ? '/api/register' : '/api/login';
+    // If level is a float from calculator (e.g. 7.5), round it to nearest integer for the level registration select option
+    const parsedLevel = isRegistering ? Math.round(parseFloat(level)) : 7;
+    
     const payload = isRegistering 
-      ? { name, pin, level: parseInt(level), position }
+      ? { name, pin, level: parsedLevel, position }
       : { name, pin };
 
     try {
@@ -526,7 +529,7 @@ export default function LoginScreen({ onLoginSuccess, language, onChangeLanguage
                 <button
                   type="button" className="btn-primary"
                   onClick={() => {
-                    setLevel(String(Math.round(calcResult)));
+                    setLevel(String(calcResult));
                     setShowCalc(false);
                   }}
                   style={{ marginTop: '14px', width: '100%' }}

@@ -130,7 +130,9 @@ const authenticateToken = (req, res, next) => {
     req.user = user; // user contains { id: playerId }
 
     // Authorization check: prevent player A from modifying player B's data (Melvin bypasses)
-    const targetPlayerId = req.params.id || req.body.playerId || req.query.playerId || req.body.player_id;
+    // Avoid checking req.params.id if it's a match ID (e.g. starting with 'm-')
+    const routeIdIsMatch = req.params.id && req.params.id.startsWith('m-');
+    const targetPlayerId = (routeIdIsMatch ? null : req.params.id) || req.body.playerId || req.query.playerId || req.body.player_id;
     if (targetPlayerId && targetPlayerId !== req.user.id && req.user.id !== 'p-melvin') {
       return res.status(403).json({ error: 'Access denied: unauthorized resource access' });
     }
@@ -209,10 +211,10 @@ const registerHandler = (req, res) => {
     const salt = bcrypt.genSaltSync(10);
     const hashedPin = bcrypt.hashSync(pin, salt);
 
-    // level is the selected Padel rating (e.g. 7.0)
-    const ratingVal = parseInt(level) || 7;
-    const dbLevel = 10 - ratingVal;
-    const eloVal = 800 + 150 * dbLevel;
+    // level is the selected Padel rating (e.g. 7.0 or 7.5)
+    const ratingVal = parseFloat(level) || 7.0;
+    const dbLevel = 10.0 - ratingVal;
+    const eloVal = Math.round(800 + 150 * dbLevel);
 
     db.prepare(`
       INSERT INTO players (id, name, level, position, pin, elo, elo_peak)
