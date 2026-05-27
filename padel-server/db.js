@@ -180,7 +180,6 @@ db.exec(`
     FOREIGN KEY (player_id) REFERENCES players (id) ON DELETE CASCADE
   );
 
-  -- Friends list (unidirectional: player_id has added friend_id)
   CREATE TABLE IF NOT EXISTS friends (
     player_id TEXT NOT NULL,
     friend_id TEXT NOT NULL,
@@ -188,6 +187,16 @@ db.exec(`
     PRIMARY KEY (player_id, friend_id),
     FOREIGN KEY (player_id) REFERENCES players (id) ON DELETE CASCADE,
     FOREIGN KEY (friend_id) REFERENCES players (id) ON DELETE CASCADE
+  );
+
+  CREATE TABLE IF NOT EXISTS friend_requests (
+    sender_id TEXT NOT NULL,
+    receiver_id TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'pending',
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    PRIMARY KEY (sender_id, receiver_id),
+    FOREIGN KEY (sender_id) REFERENCES players (id) ON DELETE CASCADE,
+    FOREIGN KEY (receiver_id) REFERENCES players (id) ON DELETE CASCADE
   );
 
   CREATE TABLE IF NOT EXISTS notifications (

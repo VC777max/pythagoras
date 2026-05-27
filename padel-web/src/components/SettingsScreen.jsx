@@ -68,6 +68,7 @@ export default function SettingsScreen({ activePlayer, token, onLogout, onRefres
   const [matchMode, setMatchMode] = useState(activePlayer.match_mode || 'open');
   const [prefMatchType, setPrefMatchType] = useState(activePlayer.pref_match_type || 'ranked');
   const [friendsList, setFriendsList] = useState([]);
+  const [friendRequests, setFriendRequests] = useState([]);
   const [friendSearch, setFriendSearch] = useState('');
   const [friendSearchResults, setFriendSearchResults] = useState([]);
   const [friendSearchLoading, setFriendSearchLoading] = useState(false);
@@ -123,7 +124,17 @@ export default function SettingsScreen({ activePlayer, token, onLogout, onRefres
     } catch (e) { console.error(e); }
   }, [token]);
 
-  useEffect(() => { loadFriends(); }, [loadFriends]);
+  const loadFriendRequests = useCallback(async () => {
+    try {
+      const res = await fetch('/api/friends/requests', { headers: { 'Authorization': `Bearer ${token}` } });
+      if (res.ok) setFriendRequests(await res.json());
+    } catch (e) { console.error(e); }
+  }, [token]);
+
+  useEffect(() => {
+    loadFriends();
+    loadFriendRequests();
+  }, [loadFriends, loadFriendRequests]);
 
   const handleFriendSearch = async (query) => {
     setFriendSearch(query);
@@ -140,17 +151,47 @@ export default function SettingsScreen({ activePlayer, token, onLogout, onRefres
 
   const handleAddFriend = async (friendId) => {
     try {
-      const res = await fetch('/api/friends', {
+      const res = await fetch('/api/friends/requests', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
         body: JSON.stringify({ friend_id: friendId })
+      });
+      if (res.ok) {
+        setFriendMsg(t('friendRequestSent'));
+        setFriendSearch('');
+        setFriendSearchResults([]);
+        loadFriends();
+        loadFriendRequests();
+        setTimeout(() => setFriendMsg(''), 2500);
+      }
+    } catch (e) { console.error(e); }
+  };
+
+  const handleAcceptRequest = async (senderId) => {
+    try {
+      const res = await fetch(`/api/friends/requests/${senderId}/accept`, {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${token}` }
       });
       if (res.ok) {
         setFriendMsg(t('friendAdded'));
         setFriendSearch('');
         setFriendSearchResults([]);
         loadFriends();
+        loadFriendRequests();
         setTimeout(() => setFriendMsg(''), 2500);
+      }
+    } catch (e) { console.error(e); }
+  };
+
+  const handleDeclineRequest = async (senderId) => {
+    try {
+      const res = await fetch(`/api/friends/requests/${senderId}/decline`, {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (res.ok) {
+        loadFriendRequests();
       }
     } catch (e) { console.error(e); }
   };
@@ -164,6 +205,7 @@ export default function SettingsScreen({ activePlayer, token, onLogout, onRefres
       if (res.ok) {
         setFriendMsg(t('friendRemoved'));
         loadFriends();
+        loadFriendRequests();
         setTimeout(() => setFriendMsg(''), 2500);
       }
     } catch (e) { console.error(e); }
@@ -719,23 +761,27 @@ export default function SettingsScreen({ activePlayer, token, onLogout, onRefres
             <div>
               <label style={labelStyle}>{t('preferredSide')}</label>
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '8px' }}>
-                {['Links', 'Rechts', 'Beide'].map(pos => (
+                {[
+                  { key: 'Links', label: t('sideLeft') },
+                  { key: 'Rechts', label: t('sideRight') },
+                  { key: 'Beide', label: t('sideBoth') }
+                ].map(pos => (
                   <button
-                    key={pos}
+                    key={pos.key}
                     type="button"
-                    onClick={() => setNewPlayerPosition(pos)}
+                    onClick={() => setNewPlayerPosition(pos.key)}
                     style={{
                       padding: '8px 0',
                       borderRadius: '7px',
                       border: '1px solid',
-                      borderColor: newPlayerPosition === pos ? 'var(--color-primary)' : 'var(--color-border-glass)',
-                      background: newPlayerPosition === pos ? 'rgba(212,255,0,0.08)' : 'transparent',
-                      color: newPlayerPosition === pos ? 'var(--color-primary)' : 'var(--color-text-muted)',
+                      borderColor: newPlayerPosition === pos.key ? 'var(--color-primary)' : 'var(--color-border-glass)',
+                      background: newPlayerPosition === pos.key ? 'rgba(212,255,0,0.08)' : 'transparent',
+                      color: newPlayerPosition === pos.key ? 'var(--color-primary)' : 'var(--color-text-muted)',
                       cursor: 'pointer',
                       fontSize: '12px'
                     }}
                   >
-                    {pos}
+                    {pos.label}
                   </button>
                 ))}
               </div>
@@ -780,6 +826,37 @@ export default function SettingsScreen({ activePlayer, token, onLogout, onRefres
               onChange={(e) => setPin(e.target.value.replace(/\D/g, ''))}
               disabled={loading}
             />
+          </div>
+
+          <div>
+            <label style={labelStyle}>{t('preferredSide')}</label>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '8px' }}>
+              {[
+                { key: 'Links', label: t('sideLeft') },
+                { key: 'Rechts', label: t('sideRight') },
+                { key: 'Beide', label: t('sideBoth') }
+              ].map(pos => (
+                <button
+                  key={pos.key}
+                  type="button"
+                  onClick={() => setPosition(pos.key)}
+                  className={`btn-secondary ${position === pos.key ? 'active-pos' : ''}`}
+                  style={{
+                    padding: '8px 0',
+                    borderRadius: '7px',
+                    border: '1px solid',
+                    borderColor: position === pos.key ? 'var(--color-primary)' : 'var(--color-border-glass)',
+                    background: position === pos.key ? 'rgba(212,255,0,0.08)' : 'transparent',
+                    color: position === pos.key ? 'var(--color-primary)' : 'var(--color-text-muted)',
+                    cursor: 'pointer',
+                    fontSize: '12px'
+                  }}
+                  disabled={loading}
+                >
+                  {pos.label}
+                </button>
+              ))}
+            </div>
           </div>
 
           {/* City dropdown */}
@@ -984,7 +1061,6 @@ export default function SettingsScreen({ activePlayer, token, onLogout, onRefres
           {friendSearchResults.length > 0 && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
               {friendSearchResults.map(p => {
-                const alreadyFriend = friendsList.some(f => f.id === p.id);
                 return (
                   <div key={p.id} style={{
                     display: 'flex', alignItems: 'center', justifyContent: 'space-between',
@@ -997,9 +1073,39 @@ export default function SettingsScreen({ activePlayer, token, onLogout, onRefres
                       <span style={{ fontSize: '13px', fontWeight: '700' }}>{p.name}</span>
                       <span style={{ fontSize: '10px', color: 'var(--color-text-muted)' }}>{p.city} · ★ {p.padel_rating}</span>
                     </div>
-                    {alreadyFriend ? (
-                      <span style={{ fontSize: '10px', color: 'var(--color-text-muted)', fontStyle: 'italic' }}>✓ {language === 'nl' ? 'Al vriend' : 'Already added'}</span>
-                    ) : (
+                    {p.friendStatus === 'friends' && (
+                      <span style={{ fontSize: '10px', color: 'var(--color-text-muted)', fontStyle: 'italic' }}>
+                        ✓ {language === 'nl' ? 'Al vrienden' : 'Already friends'}
+                      </span>
+                    )}
+                    {p.friendStatus === 'sent' && (
+                      <span style={{
+                        fontSize: '10px',
+                        color: 'var(--color-text-muted)',
+                        background: 'rgba(255,255,255,0.06)',
+                        border: '1px solid var(--color-border-glass)',
+                        borderRadius: '6px',
+                        padding: '4px 8px',
+                        fontStyle: 'italic'
+                      }}>
+                        {t('friendRequestPending')}
+                      </span>
+                    )}
+                    {p.friendStatus === 'received' && (
+                      <button
+                        type="button"
+                        onClick={() => handleAcceptRequest(p.id)}
+                        style={{
+                          display: 'flex', alignItems: 'center', gap: '4px',
+                          padding: '5px 10px', borderRadius: '6px', cursor: 'pointer',
+                          background: 'rgba(212,255,0,0.08)', border: '1px solid rgba(212,255,0,0.3)',
+                          color: 'var(--color-primary)', fontSize: '11px', fontWeight: '700'
+                        }}
+                      >
+                        <UserPlus size={12} /> {t('acceptFriend')}
+                      </button>
+                    )}
+                    {p.friendStatus === 'none' && (
                       <button
                         type="button"
                         onClick={() => handleAddFriend(p.id)}
@@ -1016,6 +1122,55 @@ export default function SettingsScreen({ activePlayer, token, onLogout, onRefres
                   </div>
                 );
               })}
+            </div>
+          )}
+
+          {/* Incoming Friend Requests */}
+          {friendRequests.length > 0 && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', borderBottom: '1px solid rgba(255,255,255,0.06)', paddingBottom: '12px', marginBottom: '4px' }}>
+              <h4 style={{ fontSize: '11px', fontWeight: '800', color: 'var(--color-primary)', margin: '4px 0 2px 0', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                {t('incomingFriendRequests')} ({friendRequests.length})
+              </h4>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                {friendRequests.map(r => (
+                  <div key={r.id} style={{
+                    display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                    padding: '8px 12px',
+                    background: 'rgba(212,255,0,0.03)',
+                    border: '1px solid rgba(212,255,0,0.15)',
+                    borderRadius: '8px'
+                  }}>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '1px' }}>
+                      <span style={{ fontSize: '13px', fontWeight: '700' }}>{r.name}</span>
+                      <span style={{ fontSize: '10px', color: 'var(--color-text-muted)' }}>{r.city} · ★ {r.padel_rating}</span>
+                    </div>
+                    <div style={{ display: 'flex', gap: '6px' }}>
+                      <button
+                        type="button"
+                        onClick={() => handleAcceptRequest(r.id)}
+                        style={{
+                          padding: '5px 10px', borderRadius: '6px', cursor: 'pointer',
+                          background: 'var(--color-primary)', border: '1px solid var(--color-primary)',
+                          color: '#0f111a', fontSize: '11px', fontWeight: '700'
+                        }}
+                      >
+                        {t('acceptFriend')}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleDeclineRequest(r.id)}
+                        style={{
+                          padding: '5px 10px', borderRadius: '6px', cursor: 'pointer',
+                          background: 'rgba(255,71,71,0.08)', border: '1px solid rgba(255,71,71,0.3)',
+                          color: 'var(--color-danger)', fontSize: '11px', fontWeight: '700'
+                        }}
+                      >
+                        {t('declineFriend')}
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
             </div>
           )}
 

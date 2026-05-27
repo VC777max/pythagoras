@@ -378,31 +378,88 @@ app.get('/api/friends', authenticateToken, (req, res) => {
   }
 });
 
-// POST /api/friends — add a friend
-app.post('/api/friends', authenticateToken, (req, res) => {
+// GET /api/friends/requests — get pending incoming friend requests for current player
+app.get('/api/friends/requests', authenticateToken, (req, res) => {
   const playerId = req.user.id;
-  const { friend_id } = req.body;
-  if (!friend_id) return res.status(400).json({ error: 'friend_id is required' });
-  if (friend_id === playerId) return res.status(400).json({ error: 'Cannot add yourself as a friend' });
-
   try {
-    const friend = db.prepare('SELECT id FROM players WHERE id = ?').get(friend_id);
-    if (!friend) return res.status(404).json({ error: 'Player not found' });
-
-    db.prepare('INSERT OR IGNORE INTO friends (player_id, friend_id) VALUES (?, ?)').run(playerId, friend_id);
-    return res.status(201).json({ success: true, friend_id });
+    const requests = db.prepare(`
+      SELECT p.id, p.name, p.level, p.city, p.avatar, p.elo, fr.created_at
+      FROM friend_requests fr
+      JOIN players p ON p.id = fr.sender_id
+      WHERE fr.receiver_id = ? AND fr.status = 'pending'
+      ORDER BY fr.created_at DESC
+    `).all(playerId);
+    requests.forEach(r => {
+      r.padel_rating = (10.0 - r.level).toFixed(1);
+    });
+    return res.json(requests);
   } catch (err) {
     console.error(err);
     return res.status(500).json({ error: 'Database error' });
   }
 });
 
-// DELETE /api/friends/:friend_id — remove a friend
-app.delete('/api/friends/:friend_id', authenticateToken, (req, res) => {
+// POST /api/friends/requests — send a friend request to Y
+app.post('/api/friends/requests', authenticateToken, (req, res) => {
   const playerId = req.user.id;
-  const { friend_id } = req.params;
+  const { friend_id } = req.body;
+  if (!friend_id) return res.status(400).json({ error: 'friend_id is required' });
+  if (friend_id === playerId) return res.status(400).json({ error: 'Cannot add yourself' });
+
   try {
-    db.prepare('DELETE FROM friends WHERE player_id = ? AND friend_id = ?').run(playerId, friend_id);
+    const friend = db.prepare('SELECT id, name FROM players WHERE id = ?').get(friend_id);
+    if (!friend) return res.status(404).json({ error: 'Player not found' });
+
+    // Check if they are already friends
+    const existingFriend = db.prepare('SELECT 1 FROM friends WHERE player_id = ? AND friend_id = ?').get(playerId, friend_id);
+    if (existingFriend) {
+      return res.status(400).json({ error: 'You are already friends' });
+    }
+
+    db.prepare('INSERT OR REPLACE INTO friend_requests (sender_id, receiver_id, status) VALUES (?, ?, ?)')
+      .run(playerId, friend_id, 'pending');
+
+    const me = db.prepare('SELECT name FROM players WHERE id = ?').get(playerId);
+    createNotification(
+      friend_id,
+      `${me?.name} heeft je een vriendschapsverzoek gestuurd!`,
+      'friend_request',
+      playerId
+    );
+
+    return res.status(201).json({ success: true, message: 'Friend request sent!' });
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ error: 'Database error' });
+  }
+});
+
+// POST /api/friends/requests/:sender_id/accept — accept friend request
+app.post('/api/friends/requests/:sender_id/accept', authenticateToken, (req, res) => {
+  const playerId = req.user.id;
+  const { sender_id } = req.params;
+
+  try {
+    const request = db.prepare('SELECT 1 FROM friend_requests WHERE sender_id = ? AND receiver_id = ? AND status = \'pending\'').get(sender_id, playerId);
+    if (!request) return res.status(404).json({ error: 'Request not found' });
+
+    db.transaction(() => {
+      // Set status to accepted
+      db.prepare('UPDATE friend_requests SET status = \'accepted\' WHERE sender_id = ? AND receiver_id = ?').run(sender_id, playerId);
+      
+      // Insert bidirectional friendship
+      db.prepare('INSERT OR IGNORE INTO friends (player_id, friend_id) VALUES (?, ?)').run(playerId, sender_id);
+      db.prepare('INSERT OR IGNORE INTO friends (player_id, friend_id) VALUES (?, ?)').run(sender_id, playerId);
+    })();
+
+    const me = db.prepare('SELECT name FROM players WHERE id = ?').get(playerId);
+    createNotification(
+      sender_id,
+      `${me?.name} heeft je vriendschapsverzoek geaccepteerd!`,
+      'friend_accept',
+      playerId
+    );
+
     return res.json({ success: true });
   } catch (err) {
     console.error(err);
@@ -410,7 +467,39 @@ app.delete('/api/friends/:friend_id', authenticateToken, (req, res) => {
   }
 });
 
-// GET /api/players/search?q=naam — search players to add as friend
+// POST /api/friends/requests/:sender_id/decline — decline / delete request
+app.post('/api/friends/requests/:sender_id/decline', authenticateToken, (req, res) => {
+  const playerId = req.user.id;
+  const { sender_id } = req.params;
+
+  try {
+    db.prepare('DELETE FROM friend_requests WHERE sender_id = ? AND receiver_id = ?').run(sender_id, playerId);
+    return res.json({ success: true });
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ error: 'Database error' });
+  }
+});
+
+// DELETE /api/friends/:friend_id — remove a friend (removes bidirectional links)
+app.delete('/api/friends/:friend_id', authenticateToken, (req, res) => {
+  const playerId = req.user.id;
+  const { friend_id } = req.params;
+  try {
+    db.transaction(() => {
+      db.prepare('DELETE FROM friends WHERE player_id = ? AND friend_id = ?').run(playerId, friend_id);
+      db.prepare('DELETE FROM friends WHERE player_id = ? AND friend_id = ?').run(friend_id, playerId);
+      db.prepare('DELETE FROM friend_requests WHERE (sender_id = ? AND receiver_id = ?) OR (sender_id = ? AND receiver_id = ?)')
+        .run(playerId, friend_id, friend_id, playerId);
+    })();
+    return res.json({ success: true });
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ error: 'Database error' });
+  }
+});
+
+// GET /api/players/search?q=naam — search players to add as friend, includes relationship metadata
 app.get('/api/players/search', authenticateToken, (req, res) => {
   const playerId = req.user.id;
   const q = (req.query.q || '').trim();
@@ -422,9 +511,26 @@ app.get('/api/players/search', authenticateToken, (req, res) => {
       WHERE id != ? AND name LIKE ?
       LIMIT 15
     `).all(playerId, `%${q}%`);
+    
     results.forEach(p => {
       p.padel_rating = (10.0 - p.level).toFixed(1);
+      
+      // Determine relationship status
+      const isFriend = db.prepare('SELECT 1 FROM friends WHERE player_id = ? AND friend_id = ?').get(playerId, p.id);
+      const sentRequest = db.prepare('SELECT status FROM friend_requests WHERE sender_id = ? AND receiver_id = ?').get(playerId, p.id);
+      const receivedRequest = db.prepare('SELECT status FROM friend_requests WHERE sender_id = ? AND receiver_id = ?').get(p.id, playerId);
+      
+      if (isFriend) {
+        p.friendStatus = 'friends';
+      } else if (sentRequest) {
+        p.friendStatus = 'sent';
+      } else if (receivedRequest) {
+        p.friendStatus = 'received';
+      } else {
+        p.friendStatus = 'none';
+      }
     });
+    
     return res.json(results);
   } catch (err) {
     console.error(err);

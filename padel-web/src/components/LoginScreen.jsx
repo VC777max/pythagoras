@@ -283,23 +283,27 @@ export default function LoginScreen({ onLoginSuccess, language, onChangeLanguage
                 {t('preferredSide')}
               </label>
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '8px' }}>
-                {['Links', 'Rechts', 'Beide'].map(pos => (
+                {[
+                  { key: 'Links', label: t('sideLeft') },
+                  { key: 'Rechts', label: t('sideRight') },
+                  { key: 'Beide', label: t('sideBoth') }
+                ].map(pos => (
                   <button
-                    key={pos}
+                    key={pos.key}
                     type="button"
-                    className={`btn-secondary ${position === pos ? 'active-pos' : ''}`}
+                    className={`btn-secondary ${position === pos.key ? 'active-pos' : ''}`}
                     style={{
                       padding: '10px 0',
                       fontSize: '12px',
                       textTransform: 'none',
-                      backgroundColor: position === pos ? 'rgba(212, 255, 0, 0.1)' : 'transparent',
-                      borderColor: position === pos ? 'var(--color-primary)' : 'var(--color-border-glass)',
-                      color: position === pos ? 'var(--color-primary)' : 'var(--color-text-primary)'
+                      backgroundColor: position === pos.key ? 'rgba(212, 255, 0, 0.1)' : 'transparent',
+                      borderColor: position === pos.key ? 'var(--color-primary)' : 'var(--color-border-glass)',
+                      color: position === pos.key ? 'var(--color-primary)' : 'var(--color-text-primary)'
                     }}
-                    onClick={() => setPosition(pos)}
+                    onClick={() => setPosition(pos.key)}
                     disabled={loading}
                   >
-                    {pos}
+                    {pos.label}
                   </button>
                 ))}
               </div>
