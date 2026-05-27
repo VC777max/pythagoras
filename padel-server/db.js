@@ -153,6 +153,8 @@ try { db.prepare("ALTER TABLE players ADD COLUMN pref_court_type TEXT NOT NULL D
 try { db.prepare("ALTER TABLE notifications ADD COLUMN link_id TEXT").run(); } catch(e) {}
 try { db.prepare("ALTER TABLE players ADD COLUMN match_mode TEXT NOT NULL DEFAULT 'open'").run(); console.log("Added column 'match_mode' to players."); } catch(e) {}
 try { db.prepare("ALTER TABLE players ADD COLUMN pref_match_type TEXT NOT NULL DEFAULT 'ranked'").run(); console.log("Added column 'pref_match_type' to players."); } catch(e) {}
+try { db.prepare("ALTER TABLE players ADD COLUMN recovery_code TEXT").run(); } catch(e) {}
+try { db.prepare("ALTER TABLE players ADD COLUMN recovery_expires TEXT").run(); } catch(e) {}
 
 
 // Create indexes to optimize matchmaking and queries
@@ -217,6 +219,13 @@ db.exec(`
     wins INTEGER NOT NULL DEFAULT 0,
     PRIMARY KEY (season_id, player_id),
     FOREIGN KEY (season_id) REFERENCES seasons (id) ON DELETE CASCADE,
+    FOREIGN KEY (player_id) REFERENCES players (id) ON DELETE CASCADE
+  );
+
+  CREATE TABLE IF NOT EXISTS push_subscriptions (
+    player_id TEXT,
+    subscription TEXT NOT NULL,
+    PRIMARY KEY (player_id, subscription),
     FOREIGN KEY (player_id) REFERENCES players (id) ON DELETE CASCADE
   );
 `);

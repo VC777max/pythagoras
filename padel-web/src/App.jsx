@@ -69,6 +69,57 @@ export default function App() {
     if (token) {
       loadNotifications();
       const interval = setInterval(loadNotifications, 10000);
+      
+      // Register Web Push
+      const registerPushNotifications = async (authToken) => {
+        if (!('serviceWorker' in navigator) || !('PushManager' in window)) {
+          console.warn('Push messaging is not supported in this browser.');
+          return;
+        }
+        try {
+          const registration = await navigator.serviceWorker.register('/sw.js');
+          let permission = Notification.permission;
+          if (permission === 'default') {
+            permission = await Notification.requestPermission();
+          }
+          if (permission !== 'granted') return;
+
+          const keyRes = await fetch('/api/vapid-public-key');
+          if (!keyRes.ok) return;
+          const { publicKey } = await keyRes.json();
+
+          const urlBase64ToUint8Array = (base64String) => {
+            const padding = '='.repeat((4 - base64String.length % 4) % 4);
+            const base64 = (base64String + padding).replace(/\-/g, '+').replace(/_/g, '/');
+            const rawData = window.atob(base64);
+            const outputArray = new Uint8Array(rawData.length);
+            for (let i = 0; i < rawData.length; ++i) {
+              outputArray[i] = rawData.charCodeAt(i);
+            }
+            return outputArray;
+          };
+
+          const subscription = await registration.pushManager.subscribe({
+            userVisibleOnly: true,
+            applicationServerKey: urlBase64ToUint8Array(publicKey)
+          });
+
+          await fetch('/api/push/subscribe', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${authToken}`
+            },
+            body: JSON.stringify({ subscription })
+          });
+          console.log('[PUSH] Web Push subscription registered.');
+        } catch (err) {
+          console.error('Failed to register push notifications:', err);
+        }
+      };
+
+      registerPushNotifications(token);
+
       return () => clearInterval(interval);
     }
   }, [token]);

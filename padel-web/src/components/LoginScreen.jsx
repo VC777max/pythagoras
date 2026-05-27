@@ -25,6 +25,72 @@ export default function LoginScreen({ onLoginSuccess, language, onChangeLanguage
   const [cq4, setCq4] = useState(-1);
   const [calcResult, setCalcResult] = useState(null);
 
+  // Recovery States
+  const [recoveryCode, setRecoveryCode] = useState('');
+  const [recoveryError, setRecoveryError] = useState('');
+  const [recoverySuccess, setRecoverySuccess] = useState('');
+  const [requestLoading, setRequestLoading] = useState(false);
+
+  const handleRequestRecovery = async () => {
+    if (!name.trim()) {
+      setRecoveryError(language === 'nl' ? 'Vul eerst je naam in op het inlogscherm.' : 'Please enter your name on the login screen first.');
+      return;
+    }
+    setRecoveryError('');
+    setRecoverySuccess('');
+    setRequestLoading(true);
+
+    try {
+      const response = await fetch('/api/recovery/request', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name })
+      });
+      const data = await response.json();
+      if (response.ok) {
+        setRecoverySuccess(language === 'nl' 
+          ? 'Herstelcode verzonden naar je actieve apparaten!' 
+          : 'Recovery code sent to your active devices!');
+      } else {
+        setRecoveryError(data.error || 'Failed to send recovery code.');
+      }
+    } catch (e) {
+      setRecoveryError('Network error. Please try again.');
+    } finally {
+      setRequestLoading(false);
+    }
+  };
+
+  const handleVerifyRecovery = async (e) => {
+    e.preventDefault();
+    if (!name.trim() || !recoveryCode.trim()) {
+      setRecoveryError(language === 'nl' ? 'Naam en code zijn verplicht.' : 'Name and code are required.');
+      return;
+    }
+    setRecoveryError('');
+    setRecoverySuccess('');
+    setRequestLoading(true);
+
+    try {
+      const response = await fetch('/api/recovery/verify', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name, code: recoveryCode })
+      });
+      const data = await response.json();
+      if (response.ok) {
+        setShowForgotModal(false);
+        onLoginSuccess(data);
+      } else {
+        setRecoveryError(data.error || 'Verification failed.');
+      }
+    } catch (e) {
+      setRecoveryError('Network error. Please try again.');
+    } finally {
+      setRequestLoading(false);
+    }
+  };
+
   const t = (key) => translate(key, language);
 
   // rating selections for registration
@@ -298,18 +364,69 @@ export default function LoginScreen({ onLoginSuccess, language, onChangeLanguage
           display: 'flex', alignItems: 'center', justifyContent: 'center',
           zIndex: 10000, padding: '20px'
         }}>
-          <div className="glass-panel" style={{ padding: '24px', maxWidth: '380px', width: '100%', textAlign: 'center' }}>
-            <h3 style={{ fontSize: '16px', fontWeight: '800', marginBottom: '12px' }}>{t('forgotPin')}</h3>
-            <p style={{ fontSize: '13px', color: 'var(--color-text-muted)', lineHeight: '1.6', marginBottom: '20px' }}>
-              {t('forgotPinMessage')}
+          <div className="glass-panel" style={{ padding: '24px', maxWidth: '380px', width: '100%', textAlign: 'center', display: 'flex', flexDirection: 'column', gap: '14px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid rgba(255,255,255,0.06)', paddingBottom: '8px' }}>
+              <h3 style={{ fontSize: '15px', fontWeight: '800', margin: 0, color: 'var(--color-primary)' }}>{t('forgotPin')}</h3>
+              <button type="button" onClick={() => { setShowForgotModal(false); setRecoveryError(''); setRecoverySuccess(''); }} style={{ background: 'none', border: 'none', color: 'var(--color-text-muted)', cursor: 'pointer' }}>
+                <X size={18} />
+              </button>
+            </div>
+            
+            <p style={{ fontSize: '12px', color: 'var(--color-text-muted)', lineHeight: '1.5', textAlign: 'left', margin: 0 }}>
+              {language === 'nl' 
+                ? `Als je al bent ingelogd op een andere browser/telefoon, vul dan eerst je naam in op het inlogscherm en klik hieronder om een herstelcode te sturen.`
+                : `If you are already logged in on another device/browser, enter your name on the login screen first, then request a recovery code below.`}
             </p>
+
+            {recoveryError && (
+              <div style={{ padding: '8px 12px', borderRadius: '6px', background: 'rgba(255,71,87,0.1)', border: '1px solid var(--color-danger)', color: 'var(--color-danger)', fontSize: '11px', textAlign: 'left' }}>
+                {recoveryError}
+              </div>
+            )}
+
+            {recoverySuccess && (
+              <div style={{ padding: '8px 12px', borderRadius: '6px', background: 'rgba(71,255,117,0.1)', border: '1px solid var(--color-success)', color: 'var(--color-success)', fontSize: '11px', textAlign: 'left' }}>
+                {recoverySuccess}
+              </div>
+            )}
+
             <button
-              onClick={() => setShowForgotModal(false)}
+              type="button"
+              onClick={handleRequestRecovery}
+              disabled={requestLoading}
               className="btn-primary"
-              style={{ width: 'auto', padding: '8px 24px', margin: '0 auto' }}
+              style={{
+                width: '100%',
+                padding: '10px',
+                fontSize: '12px',
+                background: 'rgba(255,255,255,0.04)',
+                border: '1px solid var(--color-border-glass)',
+                color: 'var(--color-text-main)'
+              }}
             >
-              {t('close')}
+              {requestLoading ? 'Sending...' : (language === 'nl' ? 'Stuur Herstelcode naar Telefoon' : 'Send Recovery Code to Phone')}
             </button>
+
+            <form onSubmit={handleVerifyRecovery} style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginTop: '8px' }}>
+              <input
+                type="text"
+                placeholder={language === 'nl' ? "Vul 6-cijferige code in" : "Enter 6-digit code"}
+                value={recoveryCode}
+                onChange={(e) => setRecoveryCode(e.target.value.replace(/\D/g, ''))}
+                maxLength={6}
+                className="input-field"
+                style={{ textAlign: 'center', letterSpacing: '4px', fontWeight: '800' }}
+                required
+              />
+              <button
+                type="submit"
+                disabled={requestLoading}
+                className="btn-primary"
+                style={{ width: '100%', padding: '10px', fontSize: '12px' }}
+              >
+                {language === 'nl' ? 'Verifieer Code & Log In' : 'Verify Code & Log In'}
+              </button>
+            </form>
           </div>
         </div>
       )}

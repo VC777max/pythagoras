@@ -6,12 +6,43 @@ import { fileURLToPath } from 'url';
 import db from './db.js';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
+import webpush from 'web-push';
 
 const app = express();
 app.use(cors());
 app.use(express.json({ limit: '1mb' }));
 
 const PORT = 3000;
+
+// Web Push / VAPID Keys Configuration
+let vapidPublicKey = '';
+let vapidPrivateKey = '';
+
+try {
+  const pubRecord = db.prepare("SELECT value FROM settings WHERE key = 'vapid_public_key'").get();
+  const privRecord = db.prepare("SELECT value FROM settings WHERE key = 'vapid_private_key'").get();
+  if (pubRecord && privRecord) {
+    vapidPublicKey = pubRecord.value;
+    vapidPrivateKey = privRecord.value;
+  } else {
+    const keys = webpush.generateVAPIDKeys();
+    vapidPublicKey = keys.publicKey;
+    vapidPrivateKey = keys.privateKey;
+    db.prepare('INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)')
+      .run('vapid_public_key', vapidPublicKey);
+    db.prepare('INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)')
+      .run('vapid_private_key', vapidPrivateKey);
+    console.log('[WEB PUSH] Generated and saved new VAPID keys in settings database table.');
+  }
+
+  webpush.setVapidDetails(
+    'mailto:admin@padelmatcher.app',
+    vapidPublicKey,
+    vapidPrivateKey
+  );
+} catch (err) {
+  console.error('[WEB PUSH CONFIG ERROR]', err);
+}
 
 // Peakz Clubs per City Dictionary
 const CITIES_CLUBS = {
@@ -263,6 +294,29 @@ app.put('/api/players/:id', authenticateToken, (req, res) => {
 });
 
 
+// Helper to send a Web Push notification to a player
+async function sendPushNotification(playerId, payload) {
+  try {
+    const subs = db.prepare('SELECT subscription FROM push_subscriptions WHERE player_id = ?').all(playerId);
+    for (const row of subs) {
+      try {
+        const subscription = JSON.parse(row.subscription);
+        await webpush.sendNotification(subscription, JSON.stringify(payload));
+      } catch (err) {
+        if (err.statusCode === 410 || err.statusCode === 404) {
+          db.prepare('DELETE FROM push_subscriptions WHERE player_id = ? AND subscription = ?')
+            .run(playerId, row.subscription);
+          console.log(`[WEB PUSH] Cleaned up expired subscription for player ${playerId}`);
+        } else {
+          console.error('[WEB PUSH SEND ERROR]', err);
+        }
+      }
+    }
+  } catch (err) {
+    console.error(`[WEB PUSH] Failed to send push to player ${playerId}:`, err);
+  }
+}
+
 // Helper: Create notification and log in-app alert
 function createNotification(playerId, message, type, linkId = null) {
   try {
@@ -274,6 +328,14 @@ function createNotification(playerId, message, type, linkId = null) {
 
     const player = db.prepare('SELECT name FROM players WHERE id = ?').get(playerId);
     console.log(`[IN-APP NOTIFICATION LOG] Sent to ${player?.name || playerId} [Type: ${type}]: "${message}" (Link: ${linkId})`);
+
+    // Trigger physical Web Push Notification
+    sendPushNotification(playerId, {
+      title: 'Padel Matcher',
+      body: message,
+      type,
+      linkId
+    });
   } catch (err) {
     console.error('Failed to create notification:', err);
   }
@@ -556,6 +618,105 @@ app.post('/api/notifications/read-all', authenticateToken, (req, res) => {
   try {
     db.prepare('UPDATE notifications SET read = 1 WHERE player_id = ?').run(playerId);
     return res.json({ success: true, message: 'All notifications marked as read' });
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ error: 'Database error' });
+  }
+});
+
+
+// GET VAPID public key
+app.get('/api/vapid-public-key', (req, res) => {
+  return res.json({ publicKey: vapidPublicKey });
+});
+
+// POST register push subscription
+app.post('/api/push/subscribe', authenticateToken, (req, res) => {
+  const playerId = req.user.id;
+  const { subscription } = req.body;
+  
+  if (!subscription) {
+    return res.status(400).json({ error: 'subscription is required' });
+  }
+
+  const subStr = typeof subscription === 'string' ? subscription : JSON.stringify(subscription);
+
+  try {
+    db.prepare('INSERT OR IGNORE INTO push_subscriptions (player_id, subscription) VALUES (?, ?)')
+      .run(playerId, subStr);
+    return res.json({ success: true });
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ error: 'Database error' });
+  }
+});
+
+// POST request recovery code
+app.post('/api/recovery/request', async (req, res) => {
+  const { name } = req.body;
+  if (!name) {
+    return res.status(400).json({ error: 'Player name is required' });
+  }
+
+  try {
+    const player = db.prepare('SELECT id, name FROM players WHERE name = ? COLLATE NOCASE').get(name);
+    if (!player) {
+      return res.status(404).json({ error: 'Player not found' });
+    }
+
+    const code = Math.floor(100000 + Math.random() * 900000).toString();
+    const expires = new Date(Date.now() + 10 * 60 * 1000).toISOString();
+
+    db.prepare('UPDATE players SET recovery_code = ?, recovery_expires = ? WHERE id = ?')
+      .run(code, expires, player.id);
+
+    console.log(`[RECOVERY] Generated recovery code for ${player.name}: ${code}`);
+    await sendPushNotification(player.id, {
+      title: 'PIN Herstelcode',
+      body: `Je Padel Matcher herstelcode is: ${code}. Deze is 10 minuten geldig.`,
+      type: 'recovery',
+      code
+    });
+
+    return res.json({ success: true, message: 'Recovery code sent to your active devices.' });
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ error: 'Database error' });
+  }
+});
+
+// POST verify recovery code and login
+app.post('/api/recovery/verify', (req, res) => {
+  const { name, code } = req.body;
+  if (!name || !code) {
+    return res.status(400).json({ error: 'Name and verification code are required' });
+  }
+
+  try {
+    const player = db.prepare('SELECT * FROM players WHERE name = ? COLLATE NOCASE').get(name);
+    if (!player) {
+      return res.status(404).json({ error: 'Player not found' });
+    }
+
+    if (!player.recovery_code || player.recovery_code !== code) {
+      return res.status(401).json({ error: 'Invalid verification code' });
+    }
+
+    const now = new Date().toISOString();
+    if (player.recovery_expires && player.recovery_expires < now) {
+      return res.status(410).json({ error: 'Verification code has expired' });
+    }
+
+    db.prepare('UPDATE players SET recovery_code = NULL, recovery_expires = NULL WHERE id = ?')
+      .run(player.id);
+
+    player.preferred_clubs = JSON.parse(player.preferred_clubs || '[]');
+    player.peakz_rating = getPeakzRating(player.elo);
+    player.peakz_rating_peak = getPeakzRating(player.elo_peak);
+
+    const token = jwt.sign({ id: player.id }, JWT_SECRET);
+    
+    return res.json({ player, token, message: 'Recovery successful' });
   } catch (err) {
     console.error(err);
     return res.status(500).json({ error: 'Database error' });
