@@ -1147,10 +1147,11 @@ app.post('/api/matches/:id/respond', (req, res) => {
     responses[playerId] = response;
 
     let newStatus = 'proposed';
+    let replacementFound = false;
+    let replacementPlayer = null;
+    let otherPlayers = [];
 
     if (response === 'rejected') {
-      newStatus = 'cancelled';
-      
       // Save this date/time in the player's rejected_slots
       const player = db.prepare('SELECT rejected_slots FROM players WHERE id = ?').get(playerId);
       const rejectedList = JSON.parse(player.rejected_slots || '[]');
@@ -1159,47 +1160,112 @@ app.post('/api/matches/:id/respond', (req, res) => {
         JSON.stringify(rejectedList),
         playerId
       );
+
+      // Try to find a replacement player who is live in the same city
+      const participants = db.prepare('SELECT player_id FROM match_players WHERE match_id = ?').all(id).map(p => p.player_id);
+      otherPlayers = participants.filter(pId => pId !== playerId);
+
+      if (otherPlayers.length === 3) {
+        const p1 = db.prepare('SELECT city, level FROM players WHERE id = ?').get(otherPlayers[0]);
+        const p2 = db.prepare('SELECT city, level FROM players WHERE id = ?').get(otherPlayers[1]);
+        const p3 = db.prepare('SELECT city, level FROM players WHERE id = ?').get(otherPlayers[2]);
+        
+        if (p1 && p2 && p3) {
+          const matchCity = p1.city;
+          const avgLevel = (p1.level + p2.level + p3.level) / 3;
+
+          const placeholders = otherPlayers.map(() => '?').join(',');
+          const candidate = db.prepare(`
+            SELECT * FROM players
+            WHERE available_now = 1
+              AND city = ?
+              AND id NOT IN (${placeholders}, ?)
+              AND ABS(level - ?) <= 3
+            ORDER BY ABS(level - ?) ASC
+            LIMIT 1
+          `).get(matchCity, ...otherPlayers, playerId, avgLevel, avgLevel);
+
+          if (candidate) {
+            replacementPlayer = candidate;
+            replacementFound = true;
+          }
+        }
+      }
+
+      if (replacementFound && replacementPlayer) {
+        const oldPlayerMatchInfo = db.prepare('SELECT team_number FROM match_players WHERE match_id = ? AND player_id = ?').get(id, playerId);
+        const teamNum = oldPlayerMatchInfo ? oldPlayerMatchInfo.team_number : 1;
+
+        db.transaction(() => {
+          db.prepare('DELETE FROM match_players WHERE match_id = ? AND player_id = ?').run(id, playerId);
+          delete responses[playerId];
+
+          db.prepare('INSERT INTO match_players (match_id, player_id, team_number) VALUES (?, ?, ?)').run(id, replacementPlayer.id, teamNum);
+          responses[replacementPlayer.id] = 'pending';
+
+          db.prepare('UPDATE players SET available_now = 0 WHERE id = ?').run(replacementPlayer.id);
+
+          const proposedTeams = JSON.parse(match.proposed_teams);
+          if (proposedTeams.team1 && proposedTeams.team1.includes(playerId)) {
+            proposedTeams.team1 = proposedTeams.team1.map(pId => pId === playerId ? replacementPlayer.id : pId);
+          } else if (proposedTeams.team2) {
+            proposedTeams.team2 = proposedTeams.team2.map(pId => pId === playerId ? replacementPlayer.id : pId);
+          }
+
+          db.prepare('UPDATE matches SET responses = ?, proposed_teams = ? WHERE id = ?')
+            .run(JSON.stringify(responses), JSON.stringify(proposedTeams), id);
+        })();
+
+        const rejectingPlayer = db.prepare('SELECT name FROM players WHERE id = ?').get(playerId);
+        
+        createNotification(
+          replacementPlayer.id,
+          `Je bent toegevoegd als vervanger in een live matchvoorstel op ${match.date} ${match.start} bij ${match.location.replace("Peakz Padel ", "")}! Accepteer of weiger.`,
+          'proposal',
+          id
+        );
+
+        otherPlayers.forEach(pId => {
+          createNotification(
+            pId,
+            `${rejectingPlayer?.name || 'Een speler'} heeft geweigerd. ${replacementPlayer.name} heeft zijn plek ingenomen!`,
+            'proposal',
+            id
+          );
+        });
+
+      } else {
+        newStatus = 'cancelled';
+        db.prepare('UPDATE matches SET status = ? WHERE id = ?').run(newStatus, id);
+
+        const otherPlaceholders = otherPlayers.map(() => '?').join(',');
+        db.prepare(`UPDATE players SET available_now = 1 WHERE id IN (${otherPlaceholders})`).run(...otherPlayers);
+
+        const rejectingPlayer = db.prepare('SELECT name FROM players WHERE id = ?').get(playerId);
+        otherPlayers.forEach(pId => {
+          createNotification(
+            pId,
+            `Matchvoorstel voor ${match.date} ${match.start} is geannuleerd omdat ${rejectingPlayer?.name || 'een speler'} heeft geweigerd. Je staat weer Live in de lobby!`,
+            'cancelled',
+            id
+          );
+        });
+      }
+
     } else {
-      // Check if all players have accepted
       const allAccepted = Object.values(responses).every(resp => resp === 'accepted');
       if (allAccepted) {
         newStatus = 'confirmed';
-        // No automatic booker assignment — booker race starts now
-        // All 4 players will see the "I'll Book the Court!" button
-
-        // Create a Session log
         const sessionId = 's-' + uuidv4().slice(0, 8);
         const playerIds = Object.keys(responses);
         db.prepare(`
           INSERT INTO sessions (id, date, players, match_id)
           VALUES (?, ?, ?, ?)
         `).run(sessionId, match.date, playerIds.join(','), id);
-      }
-    }
 
-    db.prepare(`
-      UPDATE matches
-      SET status = ?, responses = ?
-      WHERE id = ?
-    `).run(newStatus, JSON.stringify(responses), id);
+        db.prepare('UPDATE matches SET status = ? WHERE id = ?').run(newStatus, id);
 
-    // Fetch all participants to send notifications
-    try {
-      const participants = db.prepare('SELECT player_id FROM match_players WHERE match_id = ?').all(id).map(p => p.player_id);
-      
-      if (newStatus === 'cancelled') {
-        const rejectingPlayer = db.prepare('SELECT name FROM players WHERE id = ?').get(playerId);
-        participants.forEach(pId => {
-          if (pId !== playerId) {
-            createNotification(
-              pId,
-              `Matchvoorstel voor ${match.date} ${match.start} is geannuleerd omdat ${rejectingPlayer?.name || 'een speler'} heeft geweigerd.`,
-              'cancelled',
-              id
-            );
-          }
-        });
-      } else if (newStatus === 'confirmed') {
+        const participants = Object.keys(responses);
         participants.forEach(pId => {
           createNotification(
             pId,
@@ -1208,9 +1274,9 @@ app.post('/api/matches/:id/respond', (req, res) => {
             id
           );
         });
+      } else {
+        db.prepare('UPDATE matches SET responses = ? WHERE id = ?').run(JSON.stringify(responses), id);
       }
-    } catch (notifErr) {
-      console.error('Failed to notify players on match response:', notifErr);
     }
 
     return res.json({
@@ -1824,21 +1890,11 @@ app.post('/api/matches/urgent', authenticateToken, (req, res) => {
       }
 
     } else {
-      // --- OPEN MODE: find anyone available at similar level, same city first ---
-      const sameCityOthers = db.prepare(`
+      // --- OPEN MODE: find anyone available at similar level, same city only ---
+      availableOthers = db.prepare(`
         SELECT * FROM players
         WHERE available_now = 1 AND id != ? AND city = ? AND ABS(level - ?) <= 3
       `).all(player_id, requester.city, requester.level);
-
-      if (sameCityOthers.length >= 3) {
-        availableOthers = sameCityOthers;
-      } else {
-        // Fallback: any city, wider level range
-        availableOthers = db.prepare(`
-          SELECT * FROM players
-          WHERE available_now = 1 AND id != ? AND ABS(level - ?) <= 5
-        `).all(player_id, requester.level);
-      }
     }
 
     if (availableOthers.length >= 3) {

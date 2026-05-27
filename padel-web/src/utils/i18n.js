@@ -72,7 +72,7 @@ const translations = {
 
     // Leaderboard Screen
     leaderboardTitle: "Leaderboard",
-    leaderboardSub: "Rankings of all matchmaker players by ELO points.",
+    leaderboardSub: "Rankings of all players by Padel Rating.",
     rank: "Rank",
     player: "Player",
     elo: "ELO",
@@ -232,7 +232,7 @@ const translations = {
 
     // Leaderboard Screen
     leaderboardTitle: "Ranglijst",
-    leaderboardSub: "Ranglijst van alle matchmaker spelers op basis van ELO punten.",
+    leaderboardSub: "Ranglijst van alle spelers op basis van Padel Rating.",
     rank: "Positie",
     player: "Speler",
     elo: "ELO",

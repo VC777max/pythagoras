@@ -139,8 +139,7 @@ export default function LeaderboardScreen({ activePlayer, language }) {
             <div style={{ display: 'flex', padding: '10px 8px', borderBottom: '1px solid var(--color-border-glass)', fontSize: '10px', fontWeight: '800', color: 'var(--color-text-muted)', textTransform: 'uppercase' }}>
               <div style={{ width: '40px' }}>{t('rank')}</div>
               <div style={{ flex: 1 }}>{t('player')}</div>
-              <div style={{ width: '80px', textAlign: 'right' }}>{t('rating')}</div>
-              <div style={{ width: '60px', textAlign: 'right' }}>{t('elo')}</div>
+              <div style={{ width: '100px', textAlign: 'right' }}>{t('rating')}</div>
             </div>
 
             {/* Players Rows */}
@@ -179,11 +178,8 @@ export default function LeaderboardScreen({ activePlayer, language }) {
                       {player.name} {isMe && '(You)'}
                     </span>
                   </div>
-                  <div style={{ width: '80px', textAlign: 'right', fontWeight: '800', color: 'var(--color-primary)', fontSize: '13px' }}>
+                  <div style={{ width: '100px', textAlign: 'right', fontWeight: '800', color: 'var(--color-primary)', fontSize: '13px' }}>
                     {getPeakzRating(player.elo_current || player.elo)}
-                  </div>
-                  <div style={{ width: '60px', textAlign: 'right', fontSize: '11px', color: 'var(--color-text-muted)' }}>
-                    {player.elo_current || player.elo}
                   </div>
                 </div>
               );
