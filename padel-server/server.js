@@ -179,7 +179,7 @@ app.post('/api/login', (req, res) => {
 
 app.get('/api/players', (req, res) => {
   try {
-    const players = db.prepare('SELECT id, name, level, position, sessions, hours, wins, games, avail_mode, city, preferred_clubs, elo, elo_peak, avatar, available_now, match_mode, pref_match_type FROM players').all();
+    const players = db.prepare('SELECT id, name, level, position, sessions, hours, wins, games, avail_mode, city, preferred_clubs, elo, elo_peak, avatar, available_now, match_mode, pref_match_type, allow_large_skill_gap FROM players').all();
     players.forEach(p => {
       p.preferred_clubs = JSON.parse(p.preferred_clubs || '[]');
       p.peakz_rating = getPeakzRating(p.elo);
@@ -240,7 +240,7 @@ app.post('/api/register', registerHandler);
 // Update player profile/settings
 app.put('/api/players/:id', authenticateToken, (req, res) => {
   const { id } = req.params;
-  const { name, level, position, pin, city, preferred_clubs, avatar, pref_playtime, pref_court_type, match_mode, pref_match_type } = req.body;
+  const { name, level, position, pin, city, preferred_clubs, avatar, pref_playtime, pref_court_type, match_mode, pref_match_type, allow_large_skill_gap } = req.body;
 
   if (!name || level === undefined || !city) {
     return res.status(400).json({ error: 'Name, level, and city are required' });
@@ -261,6 +261,7 @@ app.put('/api/players/:id', authenticateToken, (req, res) => {
     const courtType = pref_court_type || 'double';
     const matchModeVal = (match_mode === 'friends' || match_mode === 'open') ? match_mode : (playerExists.match_mode || 'open');
     const prefMatchVal = (pref_match_type === 'friendly' || pref_match_type === 'ranked') ? pref_match_type : (playerExists.pref_match_type || 'ranked');
+    const allowSkillGapVal = allow_large_skill_gap !== undefined ? parseInt(allow_large_skill_gap) : (playerExists.allow_large_skill_gap !== undefined ? playerExists.allow_large_skill_gap : 1);
 
     // Hash PIN only if it was changed to a new 4-digit code
     let savedPin = playerExists.pin;
@@ -281,9 +282,9 @@ app.put('/api/players/:id', authenticateToken, (req, res) => {
 
     db.prepare(`
       UPDATE players
-      SET name = ?, level = ?, position = ?, pin = ?, city = ?, preferred_clubs = ?, avatar = ?, pref_playtime = ?, pref_court_type = ?, elo = ?, elo_peak = ?, match_mode = ?, pref_match_type = ?
+      SET name = ?, level = ?, position = ?, pin = ?, city = ?, preferred_clubs = ?, avatar = ?, pref_playtime = ?, pref_court_type = ?, elo = ?, elo_peak = ?, match_mode = ?, pref_match_type = ?, allow_large_skill_gap = ?
       WHERE id = ?
-    `).run(name, dbLevel, position || playerExists.position, savedPin, city, JSON.stringify(preferred_clubs || []), avatar || 'avatar_01', playtime, courtType, eloVal, eloPeakVal, matchModeVal, prefMatchVal, id);
+    `).run(name, dbLevel, position || playerExists.position, savedPin, city, JSON.stringify(preferred_clubs || []), avatar || 'avatar_01', playtime, courtType, eloVal, eloPeakVal, matchModeVal, prefMatchVal, allowSkillGapVal, id);
 
     const updatedPlayer = db.prepare('SELECT * FROM players WHERE id = ?').get(id);
     updatedPlayer.preferred_clubs = JSON.parse(updatedPlayer.preferred_clubs || '[]');
@@ -951,6 +952,12 @@ function runScheduledMatchmaker() {
     return h * 60 + m;
   };
   
+  const toTimeStr = (min) => {
+    const h = Math.floor(min / 60).toString().padStart(2, '0');
+    const m = (min % 60).toString().padStart(2, '0');
+    return `${h}:${m}`;
+  };
+
   const timeOverlap = (s1, e1, s2, e2) => {
     return Math.max(toMin(s1), toMin(s2)) < Math.min(toMin(e1), toMin(e2));
   };
@@ -963,10 +970,21 @@ function runScheduledMatchmaker() {
     return { dateStr, timeStr: timeStr.slice(0, 5) };
   };
 
+  // Load all friends relations
+  const allFriends = db.prepare('SELECT player_id, friend_id FROM friends').all();
+  const friendsMap = {};
+  allFriends.forEach(row => {
+    if (!friendsMap[row.player_id]) {
+      friendsMap[row.player_id] = new Set();
+    }
+    friendsMap[row.player_id].add(row.friend_id);
+  });
+
   const todayObj = getAmsterdamTimeAndDate(0);
   const todayStr = todayObj.dateStr;
   const todayTimeStr = todayObj.timeStr;
 
+  // We will run the matching for each target date separately
   for (let offset = 0; offset <= 7; offset++) {
     const target = getAmsterdamTimeAndDate(offset);
     const targetDateStr = target.dateStr;
@@ -974,47 +992,58 @@ function runScheduledMatchmaker() {
     const targetDateObj = new Date(targetDateStr);
     const targetDayName = dutchDays[targetDateObj.getDay()];
 
-    // 1. Weekly recurring availability
+    // 1. Fetch weekly recurring availability
     const weekly = db.prepare(`
       SELECT a.player_id, a.start_time, a.end_time, a.duration,
-             p.name, p.level, p.elo, p.city, p.preferred_clubs, p.rejected_slots, p.pref_match_type
+             p.name, p.level, p.elo, p.city, p.preferred_clubs, p.rejected_slots, p.pref_match_type, p.match_mode, p.allow_large_skill_gap
       FROM player_availability a
       JOIN players p ON a.player_id = p.id
       WHERE LOWER(a.day_name) = ?
     `).all(targetDayName.toLowerCase());
 
-    // 2. One-time date-specific availability
+    // 2. Fetch one-time date-specific availability
     const once = db.prepare(`
       SELECT a.player_id, a.start_time, a.end_time, a.duration,
-             p.name, p.level, p.elo, p.city, p.preferred_clubs, p.rejected_slots, p.pref_match_type
+             p.name, p.level, p.elo, p.city, p.preferred_clubs, p.rejected_slots, p.pref_match_type, p.match_mode, p.allow_large_skill_gap
       FROM player_availability_once a
       JOIN players p ON a.player_id = p.id
       WHERE a.date = ?
     `).all(targetDateStr);
 
-    const slotMap = {};
-    const seenPlayer = new Set();
+    // Group availabilities by city and then by player_id
+    const cityPlayersMap = {}; // city -> player_id -> player with windows
 
     const processAvail = (row) => {
+      // If target date is today, ignore past slots
       if (targetDateStr === todayStr && row.start_time <= todayTimeStr) {
         return;
       }
       
-      const slotKey = `${row.city}|${row.start_time}|${row.end_time}`;
-      const playerSlotKey = `${row.player_id}|${slotKey}`;
-      if (seenPlayer.has(playerSlotKey)) return;
-      seenPlayer.add(playerSlotKey);
-
-      if (!slotMap[slotKey]) {
-        slotMap[slotKey] = {
-          city: row.city,
-          start_time: row.start_time,
-          end_time: row.end_time,
-          duration: row.duration,
-          players: []
+      const city = row.city || 'Groningen';
+      if (!cityPlayersMap[city]) {
+        cityPlayersMap[city] = {};
+      }
+      if (!cityPlayersMap[city][row.player_id]) {
+        cityPlayersMap[city][row.player_id] = {
+          player: {
+            id: row.player_id,
+            name: row.name,
+            level: row.level,
+            elo: row.elo !== undefined && row.elo !== null ? row.elo : 1200,
+            city: city,
+            preferred_clubs: row.preferred_clubs,
+            rejected_slots: row.rejected_slots,
+            pref_match_type: row.pref_match_type,
+            match_mode: row.match_mode,
+            allow_large_skill_gap: row.allow_large_skill_gap !== undefined && row.allow_large_skill_gap !== null ? row.allow_large_skill_gap : 1
+          },
+          windows: []
         };
       }
-      slotMap[slotKey].players.push(row);
+      cityPlayersMap[city][row.player_id].windows.push({
+        start: row.start_time,
+        end: row.end_time
+      });
     };
 
     weekly.forEach(processAvail);
@@ -1028,53 +1057,187 @@ function runScheduledMatchmaker() {
       WHERE m.date = ? AND m.status IN ('proposed', 'confirmed', 'booked')
     `).all(targetDateStr);
 
-    for (const key of Object.keys(slotMap)) {
-      const slot = slotMap[key];
-      if (slot.players.length < 4) continue;
+    // For each city:
+    for (const city of Object.keys(cityPlayersMap)) {
+      const playersInCity = Object.values(cityPlayersMap[city]);
+      if (playersInCity.length < 4) continue;
 
-      const eligiblePlayers = slot.players.filter(player => {
-        const rejectedBefore = JSON.parse(player.rejected_slots || '[]').some(
-          rejected => rejected.date === targetDateStr && rejected.start === slot.start_time
-        );
-        if (rejectedBefore) return false;
-
-        const busy = activeMatchesForDate.some(match => 
-          match.player_id === player.player_id && 
-          timeOverlap(match.start, match.end, slot.start_time, slot.end_time)
-        );
-        if (busy) return false;
-
-        return true;
+      // Collect all candidate intervals for the day:
+      // Start times: every 30 minutes from 08:00 to 22:00
+      const candidateStartTimes = new Set();
+      for (let h = 8; h <= 22; h++) {
+        candidateStartTimes.add(`${h.toString().padStart(2, '0')}:00`);
+        candidateStartTimes.add(`${h.toString().padStart(2, '0')}:30`);
+      }
+      // Also add any start time values specified by the players
+      playersInCity.forEach(pi => {
+        pi.windows.forEach(w => {
+          candidateStartTimes.add(w.start);
+        });
       });
 
-      if (eligiblePlayers.length < 4) continue;
+      const sortedStartTimes = Array.from(candidateStartTimes).sort();
+      const candidateIntervals = []; // Array of { start, end, duration }
+      for (const startStr of sortedStartTimes) {
+        const startMin = toMin(startStr);
+        for (const duration of [90, 120]) {
+          const endMin = startMin + duration;
+          if (endMin <= 23 * 60 + 59) { // must end before midnight
+            candidateIntervals.push({
+              start: startStr,
+              end: toTimeStr(endMin),
+              duration: duration
+            });
+          }
+        }
+      }
 
-      eligiblePlayers.sort((a, b) => a.elo - b.elo);
+      // Generate all candidate matches across all intervals
+      const candidateGroups = [];
 
-      const numMatches = Math.floor(eligiblePlayers.length / 4);
-      for (let mIdx = 0; mIdx < numMatches; mIdx++) {
-        const chunk = eligiblePlayers.slice(mIdx * 4, (mIdx + 1) * 4);
+      for (const interval of candidateIntervals) {
+        const { start: slotStart, end: slotEnd } = interval;
 
-        const team1 = [chunk[0], chunk[3]];
-        const team2 = [chunk[1], chunk[2]];
+        // Find players who are available during this entire interval
+        const eligiblePlayers = playersInCity.filter(pi => {
+          const player = pi.player;
+
+          // 1. Has availability covering [slotStart, slotEnd]
+          const covers = pi.windows.some(w => toMin(w.start) <= toMin(slotStart) && toMin(w.end) >= toMin(slotEnd));
+          if (!covers) return false;
+
+          // 2. Has not rejected this slot starting at slotStart
+          const rejectedBefore = JSON.parse(player.rejected_slots || '[]').some(
+            rejected => rejected.date === targetDateStr && rejected.start === slotStart
+          );
+          if (rejectedBefore) return false;
+
+          // 3. Is not busy in activeMatchesForDate during this interval
+          const busy = activeMatchesForDate.some(match => 
+            match.player_id === player.id && 
+            timeOverlap(match.start, match.end, slotStart, slotEnd)
+          );
+          if (busy) return false;
+
+          return true;
+        }).map(pi => pi.player);
+
+        if (eligiblePlayers.length < 4) continue;
+
+        // Generate combinations of 4 players
+        const n = eligiblePlayers.length;
+        const searchPlayers = n > 25 ? eligiblePlayers.sort((a, b) => a.elo - b.elo).slice(0, 25) : eligiblePlayers;
+
+        for (let i = 0; i < searchPlayers.length; i++) {
+          for (let j = i + 1; j < searchPlayers.length; j++) {
+            for (let k = j + 1; k < searchPlayers.length; k++) {
+              for (let l = k + 1; l < searchPlayers.length; l++) {
+                const group = [searchPlayers[i], searchPlayers[j], searchPlayers[k], searchPlayers[l]];
+
+                // Validate skill gap constraint mutually
+                const elos = group.map(p => p.elo);
+                const minElo = Math.min(...elos);
+                const maxElo = Math.max(...elos);
+                const eloDiff = maxElo - minElo;
+
+                let isValidSkillGap = true;
+                for (const p of group) {
+                  const allowedDiff = p.allow_large_skill_gap === 0 ? 225 : 525;
+                  if (eloDiff > allowedDiff) {
+                    isValidSkillGap = false;
+                    break;
+                  }
+                }
+                if (!isValidSkillGap) continue;
+
+                // Validate friend constraints
+                let isValidFriends = true;
+                for (const p of group) {
+                  if (p.match_mode === 'friends') {
+                    const others = group.filter(other => other.id !== p.id);
+                    const allAreFriends = others.every(other => friendsMap[p.id]?.has(other.id));
+                    if (!allAreFriends) {
+                      isValidFriends = false;
+                      break;
+                    }
+                  }
+                }
+                if (!isValidFriends) continue;
+
+                // All constraints passed! Score by ELO difference (smaller is better).
+                candidateGroups.push({
+                  interval: interval,
+                  group: group,
+                  eloDiff: eloDiff
+                });
+              }
+            }
+          }
+        }
+      }
+
+      // Greedily match groups for this city: sort by ELO difference first
+      candidateGroups.sort((a, b) => a.eloDiff - b.eloDiff);
+
+      // Keep track of players matched on this date and their busy intervals
+      const matchedPlayersBusy = {}; // playerId -> Array of [start, end]
+
+      for (const cand of candidateGroups) {
+        const { interval, group } = cand;
+        const { start: slotStart, end: slotEnd } = interval;
+
+        // Check if any of the 4 players is already busy
+        const anyBusy = group.some(p => {
+          if (matchedPlayersBusy[p.id]) {
+            return matchedPlayersBusy[p.id].some(busyInt => 
+              timeOverlap(busyInt.start, busyInt.end, slotStart, slotEnd)
+            );
+          }
+          return activeMatchesForDate.some(match => 
+            match.player_id === p.id && 
+            timeOverlap(match.start, match.end, slotStart, slotEnd)
+          );
+        });
+
+        if (anyBusy) continue;
+
+        // Successfully matched! Mark players as busy
+        group.forEach(p => {
+          if (!matchedPlayersBusy[p.id]) {
+            matchedPlayersBusy[p.id] = [];
+          }
+          matchedPlayersBusy[p.id].push({ start: slotStart, end: slotEnd });
+          
+          activeMatchesForDate.push({
+            id: 'temp',
+            start: slotStart,
+            end: slotEnd,
+            player_id: p.id
+          });
+        });
+
+        // Split team 1 and team 2 using ELO balance: 1st & 4th vs 2nd & 3rd
+        const sortedGroup = [...group].sort((a, b) => a.elo - b.elo);
+        const team1 = [sortedGroup[0], sortedGroup[3]];
+        const team2 = [sortedGroup[1], sortedGroup[2]];
 
         const matchId = 'm-' + uuidv4().slice(0, 8);
         const initialResponses = {};
-        chunk.forEach(p => {
-          initialResponses[p.player_id] = 'pending';
+        sortedGroup.forEach(p => {
+          initialResponses[p.id] = 'pending';
         });
 
         const proposedTeams = {
-          team1: team1.map(p => p.player_id),
-          team2: team2.map(p => p.player_id)
+          team1: team1.map(p => p.id),
+          team2: team2.map(p => p.id)
         };
 
-        const commonClub = findCommonClub(slot.city, chunk.map(p => ({
+        const commonClub = findCommonClub(city, sortedGroup.map(p => ({
           preferred_clubs: JSON.parse(p.preferred_clubs || '[]')
         })));
 
         let friendlyVotes = 0;
-        chunk.forEach(p => {
+        sortedGroup.forEach(p => {
           if (p.pref_match_type === 'friendly') friendlyVotes++;
         });
         const finalMatchType = friendlyVotes >= 2 ? 'friendly' : 'ranked';
@@ -1093,42 +1256,33 @@ function runScheduledMatchmaker() {
             matchId,
             JSON.stringify(initialResponses),
             targetDateStr,
-            slot.start_time,
-            slot.end_time,
+            slotStart,
+            slotEnd,
             JSON.stringify(proposedTeams),
             finalMatchType,
             commonClub
           );
-          team1.forEach(p => insertMatchPlayer.run(matchId, p.player_id, 1));
-          team2.forEach(p => insertMatchPlayer.run(matchId, p.player_id, 2));
+          team1.forEach(p => insertMatchPlayer.run(matchId, p.id, 1));
+          team2.forEach(p => insertMatchPlayer.run(matchId, p.id, 2));
         })();
 
-        chunk.forEach(p => {
+        sortedGroup.forEach(p => {
           createNotification(
-            p.player_id,
-            `Nieuw wedstrijdvoorstel op ${targetDateStr} van ${slot.start_time} tot ${slot.end_time} bij ${commonClub.replace("Peakz Padel ", "Padel Club ")}!`,
+            p.id,
+            `Nieuw wedstrijdvoorstel op ${targetDateStr} van ${slotStart} tot ${slotEnd} bij ${commonClub.replace("Peakz Padel ", "Padel Club ")}!`,
             'proposal',
             matchId
           );
         });
 
-        chunk.forEach(p => {
-          activeMatchesForDate.push({
-            id: matchId,
-            start: slot.start_time,
-            end: slot.end_time,
-            player_id: p.player_id
-          });
-        });
-
         newMatchesProposals.push({
           id: matchId,
           date: targetDateStr,
-          start: slot.start_time,
-          end: slot.end_time,
+          start: slotStart,
+          end: slotEnd,
           location: commonClub,
           match_type: finalMatchType,
-          players: chunk.map(p => ({ id: p.player_id, name: p.name, level: p.level })),
+          players: sortedGroup.map(p => ({ id: p.id, name: p.name, level: p.level })),
           proposed_teams: proposedTeams
         });
       }

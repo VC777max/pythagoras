@@ -155,6 +155,7 @@ try { db.prepare("ALTER TABLE players ADD COLUMN match_mode TEXT NOT NULL DEFAUL
 try { db.prepare("ALTER TABLE players ADD COLUMN pref_match_type TEXT NOT NULL DEFAULT 'ranked'").run(); console.log("Added column 'pref_match_type' to players."); } catch(e) {}
 try { db.prepare("ALTER TABLE players ADD COLUMN recovery_code TEXT").run(); } catch(e) {}
 try { db.prepare("ALTER TABLE players ADD COLUMN recovery_expires TEXT").run(); } catch(e) {}
+try { db.prepare("ALTER TABLE players ADD COLUMN allow_large_skill_gap INTEGER NOT NULL DEFAULT 1").run(); console.log("Added column 'allow_large_skill_gap' to players."); } catch(e) {}
 
 
 // Create indexes to optimize matchmaking and queries

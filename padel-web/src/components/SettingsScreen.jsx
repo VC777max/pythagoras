@@ -68,6 +68,7 @@ export default function SettingsScreen({ activePlayer, token, onLogout, onRefres
   const [matchMode, setMatchMode] = useState(activePlayer.match_mode || 'open');
   const [prefMatchType, setPrefMatchType] = useState(activePlayer.pref_match_type || 'ranked');
   const [friendsList, setFriendsList] = useState([]);
+  const [allowLargeSkillGap, setAllowLargeSkillGap] = useState(activePlayer.allow_large_skill_gap !== 0);
   const [friendRequests, setFriendRequests] = useState([]);
   const [friendSearch, setFriendSearch] = useState('');
   const [friendSearchResults, setFriendSearchResults] = useState([]);
@@ -244,7 +245,8 @@ export default function SettingsScreen({ activePlayer, token, onLogout, onRefres
           pref_playtime: parseInt(prefPlaytime),
           pref_court_type: prefCourtType,
           match_mode: matchMode,
-          pref_match_type: prefMatchType
+          pref_match_type: prefMatchType,
+          allow_large_skill_gap: allowLargeSkillGap ? 1 : 0
         })
       });
       const data = await response.json();
@@ -1021,6 +1023,41 @@ export default function SettingsScreen({ activePlayer, token, onLogout, onRefres
                 </button>
               );
             })}
+          </div>
+
+          {/* Skill Gap Setting */}
+          <div style={{
+            marginTop: '8px',
+            borderTop: '1px solid rgba(255,255,255,0.06)',
+            paddingTop: '12px',
+            display: 'flex',
+            alignItems: 'flex-start',
+            gap: '10px',
+            cursor: 'pointer'
+          }} onClick={() => setAllowLargeSkillGap(!allowLargeSkillGap)}>
+            <div style={{
+              width: '18px',
+              height: '18px',
+              borderRadius: '4px',
+              border: '1px solid',
+              borderColor: allowLargeSkillGap ? 'var(--color-primary)' : 'rgba(255,255,255,0.2)',
+              background: allowLargeSkillGap ? 'rgba(212,255,0,0.1)' : 'transparent',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              flexShrink: 0,
+              marginTop: '1px'
+            }}>
+              {allowLargeSkillGap && <Check size={12} style={{ color: 'var(--color-primary)' }} />}
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+              <span style={{ fontSize: '12px', fontWeight: '700', color: allowLargeSkillGap ? 'var(--color-primary)' : 'var(--color-text-primary)' }}>
+                {t('allowLargeSkillGap')}
+              </span>
+              <span style={{ fontSize: '10px', color: 'var(--color-text-muted)', lineHeight: '1.4' }}>
+                {t('allowLargeSkillGapSub')}
+              </span>
+            </div>
           </div>
         </div>
 

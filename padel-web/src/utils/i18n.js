@@ -175,7 +175,9 @@ const translations = {
     reject: "Reject",
     set1: "Set 1",
     set2: "Set 2",
-    set3: "Set 3 (Super Tiebreak)"
+    set3: "Set 3 (Super Tiebreak)",
+    allowLargeSkillGap: "Allow larger skill gap when matching",
+    allowLargeSkillGapSub: "If disabled, matchmaker enforces strict skill limits (max ±1.5 rating difference)"
   },
   nl: {
     // Navigation
@@ -353,7 +355,9 @@ const translations = {
     reject: "Afkeuren",
     set1: "Set 1",
     set2: "Set 2",
-    set3: "Set 3 (Super Tiebreak)"
+    set3: "Set 3 (Super Tiebreak)",
+    allowLargeSkillGap: "Groter niveauverschil toestaan bij matchen",
+    allowLargeSkillGapSub: "Indien uitgeschakeld, handhaaft de matchmaker strikte niveaugrenzen (max ±1.5 rating verschil)"
   }
 };
 
