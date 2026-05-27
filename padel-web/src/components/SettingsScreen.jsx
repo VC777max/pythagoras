@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { User, LogOut, Check, Sliders, ChevronDown, Search, ShieldAlert, Trash2, Key, X, Plus, BarChart2, Users, UserPlus, UserMinus, Wifi } from 'lucide-react';
+import { User, LogOut, Check, Sliders, ChevronDown, Search, ShieldAlert, Trash2, Key, X, Plus, BarChart2, Users, UserPlus, UserMinus, Wifi, Award, CheckCircle2 } from 'lucide-react';
 import { translate } from '../utils/i18n';
 
 // ─── Speelsterkte Rating Calculator Logic ──────────────────────────────────
