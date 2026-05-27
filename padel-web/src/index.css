@@ -256,3 +256,35 @@ h1, h2, h3, h4 {
 .pulse-primary {
   animation: pulseGlow 2s infinite ease-in-out;
 }
+
+/* Padel Court Glow styles for Proposed Matches */
+.glass-panel-proposed {
+  border: 1px dashed rgba(212, 255, 0, 0.4) !important;
+  box-shadow: 0 4px 20px rgba(212, 255, 0, 0.05) !important;
+  transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
+}
+.glass-panel-proposed:hover {
+  transform: translateY(-2px);
+  border-color: var(--color-primary) !important;
+  border-style: solid !important;
+  box-shadow: 0 8px 30px rgba(212, 255, 0, 0.25) !important;
+}
+
+/* Pulse animation for Accepted players */
+@keyframes acceptedPulse {
+  0%, 100% {
+    transform: scale(1);
+    box-shadow: 0 0 4px rgba(212, 255, 0, 0.3);
+  }
+  50% {
+    transform: scale(1.05);
+    box-shadow: 0 0 10px rgba(212, 255, 0, 0.6);
+  }
+}
+.badge-accepted {
+  background: var(--color-primary) !important;
+  color: var(--color-bg-dark) !important;
+  font-weight: 800 !important;
+  animation: acceptedPulse 2.5s infinite ease-in-out;
+}
+

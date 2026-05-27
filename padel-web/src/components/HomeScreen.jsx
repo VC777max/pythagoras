@@ -449,10 +449,8 @@ export default function HomeScreen({ activePlayer, token, onRefreshPlayer, langu
               const iAmClaimer = match.booking_claimed_by === activePlayer.id;
               const hasBooker = match.booking_claimed_by != null;
               const isBooked = match.status === 'booked';
-              const cleanLocation = match.location.replace("Peakz Padel ", "Padel Club ");
-
-              return (
-                <div key={match.id} className="glass-panel" style={{ padding: '16px', position: 'relative', overflow: 'hidden' }}>
+              const cleanLocation = match.location.replace("Peakz Padel ", "Padel Club ");              return (
+                <div key={match.id} className={`glass-panel ${match.status === 'proposed' ? 'glass-panel-proposed' : ''}`} style={{ padding: '16px', position: 'relative', overflow: 'hidden' }}>
                   
                   {/* Status Indicator Bar */}
                   <div style={{
@@ -473,7 +471,7 @@ export default function HomeScreen({ activePlayer, token, onRefreshPlayer, langu
                       </p>
                     </div>
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', alignItems: 'flex-end' }}>
-                      <span className={`badge-chip ${isBooked ? 'primary' : ''}`} style={{ fontSize: '9px' }}>
+                      <span className={`badge-chip ${isBooked ? 'primary' : ''}`} style={{ fontSize: '9px', fontWeight: '800' }}>
                         {match.status.toUpperCase()}
                       </span>
                       {match.match_type && (
@@ -489,14 +487,20 @@ export default function HomeScreen({ activePlayer, token, onRefreshPlayer, langu
                     <div style={{ flex: 1 }}>
                       <div style={{ fontSize: '10px', fontWeight: '700', color: 'var(--color-text-muted)', marginBottom: '4px' }}>TEAM 1</div>
                       {match.players.filter(p => p.team_number === 1).map(p => (
-                        <div key={p.id} style={{ fontSize: '12px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', margin: '2px 0' }}>
+                        <div key={p.id} style={{ fontSize: '12px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', margin: '4px 0' }}>
                           <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                             <User size={10} /> {p.name}
                           </span>
                           {match.status === 'proposed' && (
-                            <span style={{ fontSize: '11px' }}>
-                              {match.responses[p.id] === 'accepted' ? '✅' : '⏳'}
-                            </span>
+                            match.responses[p.id] === 'accepted' ? (
+                              <span style={{ fontSize: '9px', background: 'rgba(212, 255, 0, 0.15)', color: '#d4ff00', border: '1px solid #d4ff00', padding: '1px 6px', borderRadius: '4px', fontWeight: '800' }}>
+                                OK
+                              </span>
+                            ) : (
+                              <span style={{ fontSize: '9px', background: 'rgba(255, 255, 255, 0.05)', color: 'var(--color-text-muted)', border: '1px solid rgba(255,255,255,0.1)', padding: '1px 6px', borderRadius: '4px', fontWeight: '700' }}>
+                                WAIT
+                              </span>
+                            )
                           )}
                         </div>
                       ))}
@@ -504,14 +508,20 @@ export default function HomeScreen({ activePlayer, token, onRefreshPlayer, langu
                     <div style={{ flex: 1 }}>
                       <div style={{ fontSize: '10px', fontWeight: '700', color: 'var(--color-text-muted)', marginBottom: '4px' }}>TEAM 2</div>
                       {match.players.filter(p => p.team_number === 2).map(p => (
-                        <div key={p.id} style={{ fontSize: '12px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', margin: '2px 0' }}>
+                        <div key={p.id} style={{ fontSize: '12px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', margin: '4px 0' }}>
                           <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                             <User size={10} /> {p.name}
                           </span>
                           {match.status === 'proposed' && (
-                            <span style={{ fontSize: '11px' }}>
-                              {match.responses[p.id] === 'accepted' ? '✅' : '⏳'}
-                            </span>
+                            match.responses[p.id] === 'accepted' ? (
+                              <span style={{ fontSize: '9px', background: 'rgba(212, 255, 0, 0.15)', color: '#d4ff00', border: '1px solid #d4ff00', padding: '1px 6px', borderRadius: '4px', fontWeight: '800' }}>
+                                OK
+                              </span>
+                            ) : (
+                              <span style={{ fontSize: '9px', background: 'rgba(255, 255, 255, 0.05)', color: 'var(--color-text-muted)', border: '1px solid rgba(255,255,255,0.1)', padding: '1px 6px', borderRadius: '4px', fontWeight: '700' }}>
+                                WAIT
+                              </span>
+                            )
                           )}
                         </div>
                       ))}
@@ -526,22 +536,22 @@ export default function HomeScreen({ activePlayer, token, onRefreshPlayer, langu
                           <button
                             className="btn-primary"
                             onClick={() => handleRespondMatch(match.id, 'accepted')}
-                            style={{ flex: 1, padding: '8px 0', fontSize: '12px', background: 'var(--color-primary)', color: '#0f111a', fontWeight: '700', cursor: 'pointer' }}
+                            style={{ flex: 1, padding: '8px 0', fontSize: '12px', background: 'var(--color-primary)', color: '#0f111a', fontWeight: '900', cursor: 'pointer', border: 'none', borderRadius: '6px', textTransform: 'uppercase', letterSpacing: '0.05em' }}
                           >
                             {t('accept')}
                           </button>
                           <button
                             className="btn-secondary"
                             onClick={() => handleRespondMatch(match.id, 'rejected')}
-                            style={{ flex: 1, padding: '8px 0', fontSize: '12px', borderColor: 'var(--color-danger)', color: 'var(--color-danger)', cursor: 'pointer' }}
+                            style={{ flex: 1, padding: '8px 0', fontSize: '12px', borderColor: 'var(--color-danger)', color: 'var(--color-danger)', cursor: 'pointer', background: 'transparent', border: '1px solid var(--color-danger)', borderRadius: '6px', textTransform: 'uppercase', fontWeight: '800', letterSpacing: '0.05em' }}
                           >
                             {t('decline')}
                           </button>
                         </div>
                       ) : (
-                        <div style={{ padding: '10px', background: 'rgba(255,255,255,0.03)', borderRadius: '6px', border: '1px solid var(--color-border-glass)', fontSize: '12px', color: 'var(--color-text-muted)', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <div style={{ padding: '10px', background: 'rgba(212, 255, 0, 0.05)', borderRadius: '6px', border: '1px solid rgba(212, 255, 0, 0.2)', fontSize: '12px', color: 'var(--color-primary)', display: 'flex', alignItems: 'center', gap: '8px', fontWeight: '700' }}>
                           <CheckCircle2 size={14} style={{ color: 'var(--color-primary)' }} />
-                          <span>{language === 'nl' ? 'Je hebt geaccepteerd! Wachten op anderen...' : 'You accepted! Waiting for others...'}</span>
+                          <span>{language === 'nl' ? 'JE HEBT GEACCEPTEERD! WACHTEN OP ANDEREN...' : 'YOU ACCEPTED! WAITING FOR OTHERS...'}</span>
                         </div>
                       )}
                     </div>
