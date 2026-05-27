@@ -86,6 +86,39 @@ export const SCRAPER_LOCATIONS = [
       double: '13',
       single: '10'
     }
+  },
+  // Assen
+  { 
+    name: 'Assen', 
+    slug: 'Fokkerstraat',
+    city: 'Assen', 
+    indoor: true, 
+    courtTypeIds: {
+      double: '13',
+      single: ''
+    }
+  },
+  // Zwolle
+  { 
+    name: 'Zwolle', 
+    slug: 'Spoorzone',
+    city: 'Zwolle', 
+    indoor: true, 
+    courtTypeIds: {
+      double: '5',
+      single: ''
+    }
+  },
+  // Papendrecht
+  { 
+    name: 'Papendrecht', 
+    slug: 'Oostpolder',
+    city: 'Papendrecht', 
+    indoor: true, 
+    courtTypeIds: {
+      double: '5',
+      single: ''
+    }
   }
 ];
 
@@ -172,7 +205,7 @@ async function runPlaywrightScrape(loc, dateStr, playingTime, courtType) {
 
   try {
     // Navigate to Peakz reservation page
-    let url = `https://www.peakzpadel.nl/reserveren/court-booking/reservation?daypart=---&date=${encodeURIComponent(actualDateStr)}&location=${encodeURIComponent(actualLoc.name)}&playingTimes=${playingTime}`;
+    let url = `https://www.peakzpadel.nl/reserveren/court-booking/reservation?daypart=---&date=${encodeURIComponent(actualDateStr)}&location=${encodeURIComponent(actualLoc.slug || actualLoc.name)}&playingTimes=${playingTime}`;
     
     // Resolve dynamic courtTypeIds
     const typeId = actualLoc.courtTypeIds ? actualLoc.courtTypeIds[courtType.toLowerCase()] : null;
