@@ -7,6 +7,7 @@ import db from './db.js';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import webpush from 'web-push';
+import { getAvailability } from './peakz-scraper.js';
 
 const app = express();
 app.use(cors());
@@ -2245,18 +2246,40 @@ app.get('/api/courts', async (req, res) => {
       availableTimes = [];
     }
 
-    const openSlots = availableTimes.filter(() => Math.random() > 0.4);
-    openSlots.forEach(time => {
-      results.push({
-        location: `Peakz Padel ${loc}`,
-        time,
-        date,
-        courtType: `${court_type === 'single' ? 'Single' : 'Double'} (${playtime} min) - ${isOutdoor ? 'Outdoor' : 'Indoor'}`,
-        isOutdoor,
-        price: getPeakzCourtPrice(time, playtime, court_type),
-        weather: weatherInfo
+    try {
+      // Attempt to scrape live Peakz availability
+      const liveData = await getAvailability(date, loc, String(playtime), court_type);
+      const liveSlots = liveData.slots.filter(s => s.available);
+      
+      liveSlots.forEach(slot => {
+        results.push({
+          location: `Peakz Padel ${loc}`,
+          time: slot.time,
+          date,
+          courtType: `${court_type === 'single' ? 'Single' : 'Double'} (${playtime} min) - ${isOutdoor ? 'Outdoor' : 'Indoor'}`,
+          isOutdoor,
+          price: slot.price || getPeakzCourtPrice(slot.time, playtime, court_type),
+          weather: weatherInfo,
+          live: true
+        });
       });
-    });
+    } catch (scrapeErr) {
+      console.error(`[SCRAPER FALLBACK] Failed to scrape Peakz for location '${loc}', date '${date}':`, scrapeErr.message);
+      // Fallback to simulated slots
+      const openSlots = availableTimes.filter(() => Math.random() > 0.4);
+      openSlots.forEach(time => {
+        results.push({
+          location: `Peakz Padel ${loc}`,
+          time,
+          date,
+          courtType: `${court_type === 'single' ? 'Single' : 'Double'} (${playtime} min) - ${isOutdoor ? 'Outdoor' : 'Indoor'}`,
+          isOutdoor,
+          price: getPeakzCourtPrice(time, playtime, court_type),
+          weather: weatherInfo,
+          fallback: true
+        });
+      });
+    }
   }
 
   return res.json(results);
