@@ -6,7 +6,7 @@ export default function HomeScreen({ activePlayer, token, onRefreshPlayer, langu
   const [activeMatches, setActiveMatches] = useState([]);
   const [urgentLoading, setUrgentLoading] = useState(false);
   const [claimingId, setClaimingId] = useState(null);
-  const [tikkieUrl, setTikkieUrl] = useState('');
+  const [tikkieUrl, setTikkieUrl] = useState(''); // kept for backward compatibility if needed, or we can just comment it out
   const [confirmingId, setConfirmingId] = useState(null);
   const [liveFriendCount, setLiveFriendCount] = useState(0);
   const [noFriendsAvailable, setNoFriendsAvailable] = useState(false);
@@ -173,11 +173,10 @@ export default function HomeScreen({ activePlayer, token, onRefreshPlayer, langu
         body: JSON.stringify({
           player_id: activePlayer.id,
           booking_url: generatedBookingUrl,
-          tikkie_url: tikkieUrl.trim() || null
+          tikkie_url: null
         })
       });
       if (response.ok) {
-        setTikkieUrl('');
         loadActiveMatches();
       }
     } catch (e) {
@@ -465,18 +464,6 @@ export default function HomeScreen({ activePlayer, token, onRefreshPlayer, langu
                             <ExternalLink size={14} /> {t('openBooking')}
                           </button>
 
-                          <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', marginTop: '4px' }}>
-                            <label style={{ fontSize: '10px', color: 'var(--color-text-muted)', fontWeight: '700' }}>{t('tikkieLabel')}</label>
-                            <input
-                              type="text"
-                              className="input-field"
-                              placeholder="https://tikkie.me/pay/..."
-                              value={tikkieUrl}
-                              onChange={(e) => setTikkieUrl(e.target.value)}
-                              style={{ padding: '8px 12px', fontSize: '12px' }}
-                            />
-                          </div>
-
                           <button
                             className="btn-primary"
                             onClick={() => handleConfirmBooked(match.id)}
@@ -506,15 +493,7 @@ export default function HomeScreen({ activePlayer, token, onRefreshPlayer, langu
                           <Link2 size={12} /> {t('viewReservation')}
                         </button>
                       )}
-                      {match.tikkie_url && (
-                        <button
-                          className="btn-primary"
-                          onClick={() => window.open(match.tikkie_url, '_blank')}
-                          style={{ flex: 1, padding: '8px 0', fontSize: '11px', gap: '4px', background: '#30c553', color: '#fff' }}
-                        >
-                          <DollarSign size={12} /> {t('payBooker')}
-                        </button>
-                      )}
+                      {/* Tikkie button removed */}
                     </div>
                   )}
 
