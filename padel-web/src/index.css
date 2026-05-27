@@ -288,3 +288,41 @@ h1, h2, h3, h4 {
   animation: acceptedPulse 2.5s infinite ease-in-out;
 }
 
+/* Glitch fade-in animations for Splash Screen */
+@keyframes fadeInGlitch {
+  0% {
+    opacity: 0;
+    transform: translateY(10px) skewX(-5deg);
+    filter: blur(5px);
+  }
+  50% {
+    opacity: 0.5;
+    transform: translateY(-2px) skewX(5deg);
+    filter: blur(1px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0) skewX(0);
+    filter: blur(0);
+  }
+}
+
+.fade-in {
+  animation: fadeInGlitch 0.5s cubic-bezier(0.25, 0.46, 0.45, 0.94) forwards;
+}
+
+@keyframes fadeInSubtitle {
+  0% {
+    opacity: 0;
+    transform: translateY(5px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.fade-in-subtitle {
+  animation: fadeInSubtitle 0.8s ease-out forwards;
+}
+

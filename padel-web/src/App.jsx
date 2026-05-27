@@ -7,6 +7,7 @@ import CourtsScreen from './components/CourtsScreen';
 import LeaderboardScreen from './components/LeaderboardScreen';
 import SettingsScreen from './components/SettingsScreen';
 import { getLanguage, setLanguage, translate } from './utils/i18n';
+import HeroFuturistic from './components/ui/HeroFuturistic';
 
 export default function App() {
   const [activePlayer, setActivePlayer] = useState(null);
@@ -17,6 +18,7 @@ export default function App() {
   const [notifications, setNotifications] = useState([]);
   const [unreadCount, setUnreadCount] = useState(0);
   const [showNotifications, setShowNotifications] = useState(false);
+  const [showSplash, setShowSplash] = useState(true);
 
   // Load player and token from localStorage on mount
   useEffect(() => {
@@ -176,6 +178,12 @@ export default function App() {
       }}>
         Loading Padel Matcher...
       </div>
+    );
+  }
+
+  if (showSplash && (!activePlayer || !token)) {
+    return (
+      <HeroFuturistic onExplore={() => setShowSplash(false)} />
     );
   }
 
