@@ -669,175 +669,247 @@ app.put('/api/players/:id/availability/once', authenticateToken, (req, res) => {
 // Matching Algorithm & Match Setup
 // ----------------------------------------
 
-app.post('/api/matches', (req, res) => {
-  try {
-    const today = new Date().toISOString().split('T')[0];
+// Core Scheduled Matchmaker function
+function runScheduledMatchmaker() {
+  console.log('[SCHEDULED MATCHMAKER] Starting matchmaking run...');
+  const newMatchesProposals = [];
 
-    // --- WEEKLY recurring slots → convert day_name to next concrete date ---
-    const weeklyAvails = db.prepare(`
-      SELECT a.player_id, a.day_name, NULL as date_specific, a.start_time, a.end_time,
-             p.level, p.name, p.rejected_slots, p.city, p.preferred_clubs
+  const dutchDays = ['zondag', 'maandag', 'dinsdag', 'woensdag', 'donderdag', 'vrijdag', 'zaterdag'];
+  
+  const toMin = (t) => {
+    const [h, m] = t.split(':').map(Number);
+    return h * 60 + m;
+  };
+  
+  const timeOverlap = (s1, e1, s2, e2) => {
+    return Math.max(toMin(s1), toMin(s2)) < Math.min(toMin(e1), toMin(e2));
+  };
+
+  const getAmsterdamTimeAndDate = (offsetDays = 0) => {
+    const d = new Date();
+    d.setDate(d.getDate() + offsetDays);
+    const str = d.toLocaleString('sv-SE', { timeZone: 'Europe/Amsterdam' });
+    const [dateStr, timeStr] = str.split(' ');
+    return { dateStr, timeStr: timeStr.slice(0, 5) };
+  };
+
+  const todayObj = getAmsterdamTimeAndDate(0);
+  const todayStr = todayObj.dateStr;
+  const todayTimeStr = todayObj.timeStr;
+
+  for (let offset = 0; offset <= 7; offset++) {
+    const target = getAmsterdamTimeAndDate(offset);
+    const targetDateStr = target.dateStr;
+    
+    const targetDateObj = new Date(targetDateStr);
+    const targetDayName = dutchDays[targetDateObj.getDay()];
+
+    // 1. Weekly recurring availability
+    const weekly = db.prepare(`
+      SELECT a.player_id, a.start_time, a.end_time, a.duration,
+             p.name, p.level, p.elo, p.city, p.preferred_clubs, p.rejected_slots, p.pref_match_type
       FROM player_availability a
       JOIN players p ON a.player_id = p.id
-    `).all();
+      WHERE LOWER(a.day_name) = ?
+    `).all(targetDayName.toLowerCase());
 
-    // --- ONE-TIME date-specific slots ---
-    const onceAvails = db.prepare(`
-      SELECT a.player_id, NULL as day_name, a.date as date_specific, a.start_time, a.end_time,
-             p.level, p.name, p.rejected_slots, p.city, p.preferred_clubs
+    // 2. One-time date-specific availability
+    const once = db.prepare(`
+      SELECT a.player_id, a.start_time, a.end_time, a.duration,
+             p.name, p.level, p.elo, p.city, p.preferred_clubs, p.rejected_slots, p.pref_match_type
       FROM player_availability_once a
       JOIN players p ON a.player_id = p.id
-      WHERE a.date >= ?
-    `).all(today);
+      WHERE a.date = ?
+    `).all(targetDateStr);
 
-    // Build unified slot entries — each entry has a resolved concrete date
-    const buildEntry = (row, resolvedDate) => ({
-      player_id: row.player_id,
-      name: row.name,
-      level: row.level,
-      city: row.city,
-      preferred_clubs: JSON.parse(row.preferred_clubs || '[]'),
-      rejected_slots: JSON.parse(row.rejected_slots || '[]'),
-      start_time: row.start_time,
-      end_time: row.end_time,
-      resolved_date: resolvedDate
-    });
+    const slotMap = {};
+    const seenPlayer = new Set();
 
-    const allEntries = [];
+    const processAvail = (row) => {
+      if (targetDateStr === todayStr && row.start_time <= todayTimeStr) {
+        return;
+      }
+      
+      const slotKey = `${row.city}|${row.start_time}|${row.end_time}`;
+      const playerSlotKey = `${row.player_id}|${slotKey}`;
+      if (seenPlayer.has(playerSlotKey)) return;
+      seenPlayer.add(playerSlotKey);
 
-    for (const row of weeklyAvails) {
-      const resolvedDate = getNextDateForDay(row.day_name);
-      allEntries.push(buildEntry(row, resolvedDate));
-    }
-    for (const row of onceAvails) {
-      allEntries.push(buildEntry(row, row.date_specific));
-    }
-
-    // Group by city|date|start_time|end_time — deduplicate same player in same slot
-    const slotsMap = {};
-    const seenPlayerSlot = new Set(); // prevent double-counting if weekly AND once overlap
-    for (const entry of allEntries) {
-      const slotKey = `${entry.city}|${entry.resolved_date}|${entry.start_time}|${entry.end_time}`;
-      const playerSlotKey = `${entry.player_id}|${slotKey}`;
-      if (seenPlayerSlot.has(playerSlotKey)) continue;
-      seenPlayerSlot.add(playerSlotKey);
-
-      if (!slotsMap[slotKey]) {
-        slotsMap[slotKey] = {
-          city: entry.city,
-          resolved_date: entry.resolved_date,
-          start_time: entry.start_time,
-          end_time: entry.end_time,
+      if (!slotMap[slotKey]) {
+        slotMap[slotKey] = {
+          city: row.city,
+          start_time: row.start_time,
+          end_time: row.end_time,
+          duration: row.duration,
           players: []
         };
       }
-      slotsMap[slotKey].players.push(entry);
-    }
+      slotMap[slotKey].players.push(row);
+    };
 
-    // 2. Find slots that have at least 4 available players
-    let proposedMatch = null;
+    weekly.forEach(processAvail);
+    once.forEach(processAvail);
 
-    for (const key of Object.keys(slotsMap)) {
-      const slot = slotsMap[key];
-      if (slot.players.length >= 4) {
-        const nextDate = slot.resolved_date; // already a concrete YYYY-MM-DD date
+    // Fetch active matches for this date to prevent double-booking
+    const activeMatchesForDate = db.prepare(`
+      SELECT m.id, m.start, m.end, mp.player_id
+      FROM matches m
+      JOIN match_players mp ON m.id = mp.match_id
+      WHERE m.date = ? AND m.status IN ('proposed', 'confirmed', 'booked')
+    `).all(targetDateStr);
 
-        // Filter out players who previously rejected this exact date + time slot
-        const eligiblePlayers = slot.players.filter(player => {
-          const rejectedBefore = player.rejected_slots.some(
-            rejected => rejected.date === nextDate && rejected.start === slot.start_time
-          );
-          return !rejectedBefore;
+    for (const key of Object.keys(slotMap)) {
+      const slot = slotMap[key];
+      if (slot.players.length < 4) continue;
+
+      const eligiblePlayers = slot.players.filter(player => {
+        const rejectedBefore = JSON.parse(player.rejected_slots || '[]').some(
+          rejected => rejected.date === targetDateStr && rejected.start === slot.start_time
+        );
+        if (rejectedBefore) return false;
+
+        const busy = activeMatchesForDate.some(match => 
+          match.player_id === player.player_id && 
+          timeOverlap(match.start, match.end, slot.start_time, slot.end_time)
+        );
+        if (busy) return false;
+
+        return true;
+      });
+
+      if (eligiblePlayers.length < 4) continue;
+
+      eligiblePlayers.sort((a, b) => a.elo - b.elo);
+
+      const numMatches = Math.floor(eligiblePlayers.length / 4);
+      for (let mIdx = 0; mIdx < numMatches; mIdx++) {
+        const chunk = eligiblePlayers.slice(mIdx * 4, (mIdx + 1) * 4);
+
+        const team1 = [chunk[0], chunk[3]];
+        const team2 = [chunk[1], chunk[2]];
+
+        const matchId = 'm-' + uuidv4().slice(0, 8);
+        const initialResponses = {};
+        chunk.forEach(p => {
+          initialResponses[p.player_id] = 'pending';
         });
 
-        if (eligiblePlayers.length >= 4) {
-          const duplicate = db.prepare(`
-            SELECT id FROM matches
-            WHERE date = ? AND start = ? AND status NOT IN ('cancelled', 'completed')
-          `).get(nextDate, slot.start_time);
+        const proposedTeams = {
+          team1: team1.map(p => p.player_id),
+          team2: team2.map(p => p.player_id)
+        };
 
-          if (duplicate) continue;
+        const commonClub = findCommonClub(slot.city, chunk.map(p => ({
+          preferred_clubs: JSON.parse(p.preferred_clubs || '[]')
+        })));
 
-          eligiblePlayers.sort((a, b) => a.level - b.level);
-          const selected = eligiblePlayers.slice(0, 4);
+        let friendlyVotes = 0;
+        chunk.forEach(p => {
+          if (p.pref_match_type === 'friendly') friendlyVotes++;
+        });
+        const finalMatchType = friendlyVotes >= 2 ? 'friendly' : 'ranked';
 
-          // Team balancing: P0+P3 vs P1+P2 (equal average level)
-          const team1 = [selected[0], selected[3]];
-          const team2 = [selected[1], selected[2]];
+        const insertMatch = db.prepare(`
+          INSERT INTO matches (id, status, responses, date, start, end, proposed_teams, match_type, location)
+          VALUES (?, 'proposed', ?, ?, ?, ?, ?, ?, ?)
+        `);
+        const insertMatchPlayer = db.prepare(`
+          INSERT INTO match_players (match_id, player_id, team_number)
+          VALUES (?, ?, ?)
+        `);
 
-          const matchId = 'm-' + uuidv4().slice(0, 8);
-          const initialResponses = {};
-          selected.forEach(p => { initialResponses[p.player_id] = 'pending'; });
+        db.transaction(() => {
+          insertMatch.run(
+            matchId,
+            JSON.stringify(initialResponses),
+            targetDateStr,
+            slot.start_time,
+            slot.end_time,
+            JSON.stringify(proposedTeams),
+            finalMatchType,
+            commonClub
+          );
+          team1.forEach(p => insertMatchPlayer.run(matchId, p.player_id, 1));
+          team2.forEach(p => insertMatchPlayer.run(matchId, p.player_id, 2));
+        })();
 
-          const proposedTeams = {
-            team1: team1.map(p => p.player_id),
-            team2: team2.map(p => p.player_id)
-          };
+        chunk.forEach(p => {
+          createNotification(
+            p.player_id,
+            `Nieuw wedstrijdvoorstel op ${targetDateStr} van ${slot.start_time} tot ${slot.end_time} bij ${commonClub.replace("Peakz Padel ", "Padel Club ")}!`,
+            'proposal',
+            matchId
+          );
+        });
 
-          const commonClub = findCommonClub(slot.city, selected);
-          const matchType = req.body?.match_type === 'ranked' ? 'ranked' : 'friendly';
-
-          const insertMatch = db.prepare(`
-            INSERT INTO matches (id, status, responses, date, start, end, proposed_teams, match_type, location)
-            VALUES (?, 'proposed', ?, ?, ?, ?, ?, ?, ?)
-          `);
-          const insertMatchPlayer = db.prepare(`
-            INSERT INTO match_players (match_id, player_id, team_number)
-            VALUES (?, ?, ?)
-          `);
-
-          const transaction = db.transaction(() => {
-            insertMatch.run(
-              matchId,
-              JSON.stringify(initialResponses),
-              nextDate,
-              slot.start_time,
-              slot.end_time,
-              JSON.stringify(proposedTeams),
-              matchType,
-              commonClub
-            );
-            team1.forEach(p => insertMatchPlayer.run(matchId, p.player_id, 1));
-            team2.forEach(p => insertMatchPlayer.run(matchId, p.player_id, 2));
-          });
-
-          transaction();
-
-          // Create notifications for the 4 players
-          selected.forEach(p => {
-            createNotification(
-              p.player_id,
-              `Nieuw wedstrijdvoorstel op ${nextDate} van ${slot.start_time} tot ${slot.end_time} bij ${commonClub.replace("Peakz Padel ", "Padel Club ")}!`,
-              'proposal',
-              matchId
-            );
-          });
-
-          proposedMatch = {
+        chunk.forEach(p => {
+          activeMatchesForDate.push({
             id: matchId,
-            date: nextDate,
             start: slot.start_time,
             end: slot.end_time,
-            location: commonClub,
-            match_type: matchType,
-            players: selected.map(p => ({ id: p.player_id, name: p.name, level: p.level })),
-            proposed_teams: proposedTeams
-          };
-          break;
-        }
+            player_id: p.player_id
+          });
+        });
+
+        newMatchesProposals.push({
+          id: matchId,
+          date: targetDateStr,
+          start: slot.start_time,
+          end: slot.end_time,
+          location: commonClub,
+          match_type: finalMatchType,
+          players: chunk.map(p => ({ id: p.player_id, name: p.name, level: p.level })),
+          proposed_teams: proposedTeams
+        });
       }
     }
+  }
 
-    if (proposedMatch) {
-      return res.status(201).json(proposedMatch);
-    } else {
-      return res.status(200).json({ message: 'No matching availability slots found at this time' });
-    }
+  console.log(`[SCHEDULED MATCHMAKER] Finished run. Created ${newMatchesProposals.length} new match proposals.`);
+  return newMatchesProposals;
+}
+
+app.post('/api/matches', (req, res) => {
+  try {
+    const proposals = runScheduledMatchmaker();
+    return res.status(200).json({
+      success: true,
+      message: `Matchmaker run complete. Proposals created: ${proposals.length}`,
+      proposals
+    });
   } catch (err) {
     console.error(err);
     return res.status(500).json({ error: 'Database error' });
   }
 });
+
+app.post('/api/admin/trigger-matchmaker', authenticateToken, requireAdmin, (req, res) => {
+  try {
+    const proposals = runScheduledMatchmaker();
+    return res.json({
+      success: true,
+      count: proposals.length,
+      proposals
+    });
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ error: 'Failed to run matchmaker' });
+  }
+});
+
+// Run scheduled matchmaker once on startup and then every 15 minutes
+try {
+  runScheduledMatchmaker();
+} catch (err) {
+  console.error('[BACKGROUND MATCHMAKER ON STARTUP ERROR]', err);
+}
+setInterval(() => {
+  try {
+    runScheduledMatchmaker();
+  } catch (err) {
+    console.error('[BACKGROUND MATCHMAKER ERROR]', err);
+  }
+}, 15 * 60 * 1000);
 
 // Get active proposed/confirmed/booked matches for a player
 app.get('/api/matches/active', authenticateToken, (req, res) => {
