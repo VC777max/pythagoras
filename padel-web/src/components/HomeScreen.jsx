@@ -115,6 +115,24 @@ export default function HomeScreen({ activePlayer, token, onRefreshPlayer, langu
   }, [token]);
 
 
+  const handleRespondMatch = async (matchId, responseVal) => {
+    try {
+      const response = await fetch(`/api/matches/${matchId}/respond`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({ playerId: activePlayer.id, response: responseVal })
+      });
+      if (response.ok) {
+        loadActiveMatches();
+      }
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
   const handleClaimBooking = async (matchId) => {
     setClaimingId(matchId);
     try {
@@ -357,23 +375,66 @@ export default function HomeScreen({ activePlayer, token, onRefreshPlayer, langu
                     <div style={{ flex: 1 }}>
                       <div style={{ fontSize: '10px', fontWeight: '700', color: 'var(--color-text-muted)', marginBottom: '4px' }}>TEAM 1</div>
                       {match.players.filter(p => p.team_number === 1).map(p => (
-                        <div key={p.id} style={{ fontSize: '12px', display: 'flex', alignItems: 'center', gap: '6px', margin: '2px 0' }}>
-                          <User size={10} /> {p.name}
+                        <div key={p.id} style={{ fontSize: '12px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', margin: '2px 0' }}>
+                          <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                            <User size={10} /> {p.name}
+                          </span>
+                          {match.status === 'proposed' && (
+                            <span style={{ fontSize: '11px' }}>
+                              {match.responses[p.id] === 'accepted' ? '✅' : '⏳'}
+                            </span>
+                          )}
                         </div>
                       ))}
                     </div>
                     <div style={{ flex: 1 }}>
                       <div style={{ fontSize: '10px', fontWeight: '700', color: 'var(--color-text-muted)', marginBottom: '4px' }}>TEAM 2</div>
                       {match.players.filter(p => p.team_number === 2).map(p => (
-                        <div key={p.id} style={{ fontSize: '12px', display: 'flex', alignItems: 'center', gap: '6px', margin: '2px 0' }}>
-                          <User size={10} /> {p.name}
+                        <div key={p.id} style={{ fontSize: '12px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', margin: '2px 0' }}>
+                          <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                            <User size={10} /> {p.name}
+                          </span>
+                          {match.status === 'proposed' && (
+                            <span style={{ fontSize: '11px' }}>
+                              {match.responses[p.id] === 'accepted' ? '✅' : '⏳'}
+                            </span>
+                          )}
                         </div>
                       ))}
                     </div>
                   </div>
 
-                  {/* Booker flow logic */}
-                  {!isBooked && (
+                  {/* Proposed match flow */}
+                  {match.status === 'proposed' && (
+                    <div style={{ marginTop: '12px' }}>
+                      {match.responses[activePlayer.id] === 'pending' ? (
+                        <div style={{ display: 'flex', gap: '8px' }}>
+                          <button
+                            className="btn-primary"
+                            onClick={() => handleRespondMatch(match.id, 'accepted')}
+                            style={{ flex: 1, padding: '8px 0', fontSize: '12px', background: 'var(--color-primary)', color: '#0f111a', fontWeight: '700', cursor: 'pointer' }}
+                          >
+                            {t('accept')}
+                          </button>
+                          <button
+                            className="btn-secondary"
+                            onClick={() => handleRespondMatch(match.id, 'rejected')}
+                            style={{ flex: 1, padding: '8px 0', fontSize: '12px', borderColor: 'var(--color-danger)', color: 'var(--color-danger)', cursor: 'pointer' }}
+                          >
+                            {t('decline')}
+                          </button>
+                        </div>
+                      ) : (
+                        <div style={{ padding: '10px', background: 'rgba(255,255,255,0.03)', borderRadius: '6px', border: '1px solid var(--color-border-glass)', fontSize: '12px', color: 'var(--color-text-muted)', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                          <CheckCircle2 size={14} style={{ color: 'var(--color-primary)' }} />
+                          <span>{language === 'nl' ? 'Je hebt geaccepteerd! Wachten op anderen...' : 'You accepted! Waiting for others...'}</span>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Booker flow logic (Only for confirmed status) */}
+                  {match.status === 'confirmed' && (
                     <div style={{ marginTop: '10px' }}>
                       {!hasBooker ? (
                         <button
