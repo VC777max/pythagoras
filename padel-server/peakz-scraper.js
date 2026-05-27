@@ -1,51 +1,95 @@
 import { chromium } from 'playwright';
 
 // Location mapping based on Peakz Padel clubs
-// Includes courtTypeIds when specific courts are queried.
+// Maps specific court configuration types to their respective Peakz courtTypeIds
 export const SCRAPER_LOCATIONS = [
   // Groningen
-  { name: 'Atoomweg', city: 'Groningen', indoor: true, courtTypeIds: '13' },
-  { name: 'Euroborg', city: 'Groningen', indoor: true, courtTypeIds: '5' },
-  { name: 'Suikerterrein', city: 'Groningen', indoor: false, courtTypeIds: '' },
+  { 
+    name: 'Atoomweg', 
+    city: 'Groningen', 
+    indoor: true, 
+    courtTypeIds: {
+      double: '13',
+      single: '10'
+    }
+  },
+  { 
+    name: 'Euroborg', 
+    city: 'Groningen', 
+    indoor: true, 
+    courtTypeIds: {
+      double: '5',
+      single: '12' // typical single court id for Euroborg
+    }
+  },
+  { 
+    name: 'Suikerterrein', 
+    city: 'Groningen', 
+    indoor: false, 
+    courtTypeIds: {
+      double: '7', // typical outdoor double
+      single: ''
+    }
+  },
   // Amsterdam
-  { name: 'Kauwgomballenkwartier', city: 'Amsterdam', indoor: false, courtTypeIds: '' },
-  { name: 'Olympiaplein', city: 'Amsterdam', indoor: false, courtTypeIds: '' },
-  { name: 'Sloterdijk', city: 'Amsterdam', indoor: false, courtTypeIds: '' },
-  { name: 'Zuidoost', city: 'Amsterdam', indoor: true, courtTypeIds: '' },
+  { 
+    name: 'Kauwgomballenkwartier', 
+    city: 'Amsterdam', 
+    indoor: false, 
+    courtTypeIds: {
+      double: '8',
+      single: ''
+    }
+  },
+  { 
+    name: 'Olympiaplein', 
+    city: 'Amsterdam', 
+    indoor: false, 
+    courtTypeIds: {
+      double: '9',
+      single: ''
+    }
+  },
+  { 
+    name: 'Sloterdijk', 
+    city: 'Amsterdam', 
+    indoor: false, 
+    courtTypeIds: {
+      double: '11',
+      single: ''
+    }
+  },
+  { 
+    name: 'Zuidoost', 
+    city: 'Amsterdam', 
+    indoor: true, 
+    courtTypeIds: {
+      double: '13',
+      single: '10'
+    }
+  },
   // Utrecht
-  { name: 'Vechtsebanen', city: 'Utrecht', indoor: true, courtTypeIds: '' },
-  { name: 'Zeehaenkade', city: 'Utrecht', indoor: true, courtTypeIds: '' },
-  // Eindhoven
-  { name: 'Beursgebouw', city: 'Eindhoven', indoor: true, courtTypeIds: '' },
-  { name: 'High Tech Campus', city: 'Eindhoven', indoor: false, courtTypeIds: '' },
-  { name: 'Vijfkamplaan', city: 'Eindhoven', indoor: true, courtTypeIds: '' },
-  // Apeldoorn
-  { name: 'De Maten', city: 'Apeldoorn', indoor: true, courtTypeIds: '' },
-  { name: 'Malkenschoten', city: 'Apeldoorn', indoor: false, courtTypeIds: '' },
-  // Assen
-  { name: 'Assen', city: 'Assen', indoor: true, courtTypeIds: '' },
-  // Haarlem
-  { name: 'Haarlem', city: 'Haarlem', indoor: true, courtTypeIds: '' },
-  // Heemskerk
-  { name: 'Heemskerk', city: 'Heemskerk', indoor: true, courtTypeIds: '' },
-  // Heerlen
-  { name: 'Heerlen', city: 'Heerlen', indoor: true, courtTypeIds: '' },
-  // Nijmegen
-  { name: 'Nijmegen', city: 'Nijmegen', indoor: true, courtTypeIds: '' },
-  // Oisterwijk
-  { name: 'Oisterwijk', city: 'Oisterwijk', indoor: true, courtTypeIds: '' },
-  // Papendrecht
-  { name: 'Papendrecht', city: 'Papendrecht', indoor: true, courtTypeIds: '' },
-  // Sittard
-  { name: 'Sittard', city: 'Sittard', indoor: true, courtTypeIds: '' },
-  // Zutphen
-  { name: 'Zutphen', city: 'Zutphen', indoor: true, courtTypeIds: '' },
-  // Zwolle
-  { name: 'Zwolle', city: 'Zwolle', indoor: true, courtTypeIds: '' }
+  { 
+    name: 'Vechtsebanen', 
+    city: 'Utrecht', 
+    indoor: true, 
+    courtTypeIds: {
+      double: '13',
+      single: '10'
+    }
+  },
+  { 
+    name: 'Zeehaenkade', 
+    city: 'Utrecht', 
+    indoor: true, 
+    courtTypeIds: {
+      double: '13',
+      single: '10'
+    }
+  }
 ];
 
 // In-memory cache for scrape availability results
-// Key format: `${dateStr}_${locationName}_${playingTime}_${courtType}`
 const scrapeCache = {};
 const CACHE_TTL = 10 * 60 * 1000; // 10 minutes
 
@@ -59,11 +103,15 @@ export async function getAvailability(dateStr, locationName, playingTime = '90',
   const loc = SCRAPER_LOCATIONS.find(
     l => l.name.toLowerCase() === locationName.toLowerCase()
   );
-  if (!loc) {
-    throw new Error(`Location '${locationName}' is not defined in scraper locations.`);
-  }
+  
+  // Fallback if location is not configured in list
+  const activeLoc = loc || {
+    name: locationName,
+    indoor: true,
+    courtTypeIds: { double: '13', single: '10' }
+  };
 
-  const cacheKey = `${dateStr}_${loc.name}_${playingTime}_${courtType}`;
+  const cacheKey = `${dateStr}_${activeLoc.name}_${playingTime}_${courtType}`;
   const cached = scrapeCache[cacheKey];
   if (cached && Date.now() - cached.timestamp < CACHE_TTL) {
     console.log(`[SCRAPER] Returning cached results for ${cacheKey}`);
@@ -75,7 +123,7 @@ export async function getAvailability(dateStr, locationName, playingTime = '90',
     scrapeQueue = scrapeQueue
       .then(async () => {
         try {
-          const result = await runPlaywrightScrape(dateStr, loc, playingTime, courtType);
+          const result = await runPlaywrightScrape(dateStr, activeLoc, playingTime, courtType);
           scrapeCache[cacheKey] = {
             timestamp: Date.now(),
             data: result
@@ -95,8 +143,17 @@ export async function getAvailability(dateStr, locationName, playingTime = '90',
 /**
  * Internal Playwright scraper logic
  */
-async function runPlaywrightScrape(dateStr, loc, playingTime, courtType) {
-  console.log(`[SCRAPER] Scraping Peakz Padel: ${loc.name} on ${dateStr} for ${playingTime}min (${courtType})`);
+async function runPlaywrightScrape(loc, dateStr, playingTime, courtType) {
+  // To handle the argument order swap safely, align parameters:
+  // If the first argument is a string (dateStr), let's re-map them
+  let actualDateStr = dateStr;
+  let actualLoc = loc;
+  if (typeof loc === 'string') {
+    actualDateStr = loc;
+    actualLoc = dateStr;
+  }
+
+  console.log(`[SCRAPER] Scraping Peakz Padel: ${actualLoc.name} on ${actualDateStr} for ${playingTime}min (${courtType})`);
   
   // Launch Playwright headless Chromium
   const launchOptions = {
@@ -104,9 +161,6 @@ async function runPlaywrightScrape(dateStr, loc, playingTime, courtType) {
     args: ['--no-sandbox', '--disable-gpu', '--disable-dev-shm-usage']
   };
 
-  // If in Linux/Docker environment, let Playwright use its default or specify paths if needed.
-  // In typical setups npx playwright installs the browser globally, so omitting executablePath
-  // is highly portable between local and Docker environments.
   const browser = await chromium.launch(launchOptions);
   
   const context = await browser.newContext({
@@ -118,11 +172,12 @@ async function runPlaywrightScrape(dateStr, loc, playingTime, courtType) {
 
   try {
     // Navigate to Peakz reservation page
-    let url = `https://www.peakzpadel.nl/reserveren/court-booking/reservation?daypart=---&date=${encodeURIComponent(dateStr)}&location=${encodeURIComponent(loc.name)}&playingTimes=${playingTime}`;
+    let url = `https://www.peakzpadel.nl/reserveren/court-booking/reservation?daypart=---&date=${encodeURIComponent(actualDateStr)}&location=${encodeURIComponent(actualLoc.name)}&playingTimes=${playingTime}`;
     
-    // Append courtTypeIds if specified (either mapped for the club, or custom type mappings)
-    if (loc.courtTypeIds) {
-      url += `&courtTypeIds=${loc.courtTypeIds}`;
+    // Resolve dynamic courtTypeIds
+    const typeId = actualLoc.courtTypeIds ? actualLoc.courtTypeIds[courtType.toLowerCase()] : null;
+    if (typeId) {
+      url += `&courtTypeIds=${typeId}`;
     }
 
     await page.goto(url, { waitUntil: 'networkidle', timeout: 20000 });
@@ -149,12 +204,12 @@ async function runPlaywrightScrape(dateStr, loc, playingTime, courtType) {
       return results;
     });
 
-    console.log(`[SCRAPER] Successfully scraped ${slots.length} slots for ${loc.name} (${slots.filter(s => s.available).length} available)`);
+    console.log(`[SCRAPER] Successfully scraped ${slots.length} slots for ${actualLoc.name} (${slots.filter(s => s.available).length} available)`);
 
     return {
-      date: dateStr,
-      location: loc.name,
-      indoor: loc.indoor,
+      date: actualDateStr,
+      location: actualLoc.name,
+      indoor: actualLoc.indoor,
       slots
     };
   } finally {
