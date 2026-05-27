@@ -145,7 +145,7 @@ app.post('/api/login', (req, res) => {
 
 app.get('/api/players', (req, res) => {
   try {
-    const players = db.prepare('SELECT id, name, level, position, sessions, hours, wins, games, avail_mode, city, preferred_clubs, elo, elo_peak, avatar, available_now, match_mode FROM players').all();
+    const players = db.prepare('SELECT id, name, level, position, sessions, hours, wins, games, avail_mode, city, preferred_clubs, elo, elo_peak, avatar, available_now, match_mode, pref_match_type FROM players').all();
     players.forEach(p => {
       p.preferred_clubs = JSON.parse(p.preferred_clubs || '[]');
       p.peakz_rating = getPeakzRating(p.elo);
@@ -206,10 +206,10 @@ app.post('/api/register', registerHandler);
 // Update player profile/settings
 app.put('/api/players/:id', authenticateToken, (req, res) => {
   const { id } = req.params;
-  const { name, level, position, pin, city, preferred_clubs, avatar, pref_playtime, pref_court_type, match_mode } = req.body;
+  const { name, level, position, pin, city, preferred_clubs, avatar, pref_playtime, pref_court_type, match_mode, pref_match_type } = req.body;
 
-  if (!name || level === undefined || !pin || !city) {
-    return res.status(400).json({ error: 'Name, level, pin, and city are required' });
+  if (!name || level === undefined || !city) {
+    return res.status(400).json({ error: 'Name, level, and city are required' });
   }
 
   try {
@@ -226,9 +226,10 @@ app.put('/api/players/:id', authenticateToken, (req, res) => {
     const playtime = pref_playtime !== undefined ? parseInt(pref_playtime) : 90;
     const courtType = pref_court_type || 'double';
     const matchModeVal = (match_mode === 'friends' || match_mode === 'open') ? match_mode : (playerExists.match_mode || 'open');
+    const prefMatchVal = (pref_match_type === 'friendly' || pref_match_type === 'ranked') ? pref_match_type : (playerExists.pref_match_type || 'ranked');
 
     // Hash PIN only if it was changed to a new 4-digit code
-    let savedPin = pin;
+    let savedPin = playerExists.pin;
     if (pin && pin.length === 4) {
       const salt = bcrypt.genSaltSync(10);
       savedPin = bcrypt.hashSync(pin, salt);
@@ -246,9 +247,9 @@ app.put('/api/players/:id', authenticateToken, (req, res) => {
 
     db.prepare(`
       UPDATE players
-      SET name = ?, level = ?, position = ?, pin = ?, city = ?, preferred_clubs = ?, avatar = ?, pref_playtime = ?, pref_court_type = ?, elo = ?, elo_peak = ?, match_mode = ?
+      SET name = ?, level = ?, position = ?, pin = ?, city = ?, preferred_clubs = ?, avatar = ?, pref_playtime = ?, pref_court_type = ?, elo = ?, elo_peak = ?, match_mode = ?, pref_match_type = ?
       WHERE id = ?
-    `).run(name, dbLevel, position || playerExists.position, savedPin, city, JSON.stringify(preferred_clubs || []), avatar || 'avatar_01', playtime, courtType, eloVal, eloPeakVal, matchModeVal, id);
+    `).run(name, dbLevel, position || playerExists.position, savedPin, city, JSON.stringify(preferred_clubs || []), avatar || 'avatar_01', playtime, courtType, eloVal, eloPeakVal, matchModeVal, prefMatchVal, id);
 
     const updatedPlayer = db.prepare('SELECT * FROM players WHERE id = ?').get(id);
     updatedPlayer.preferred_clubs = JSON.parse(updatedPlayer.preferred_clubs || '[]');
@@ -373,7 +374,7 @@ app.get('/api/players/search', authenticateToken, (req, res) => {
 // GET all players with stats and ELO
 app.get('/api/admin/players', authenticateToken, requireAdmin, (req, res) => {
   try {
-    const players = db.prepare('SELECT id, name, level, position, sessions, hours, wins, games, avail_mode, city, preferred_clubs, elo, elo_peak, avatar, available_now FROM players').all();
+    const players = db.prepare('SELECT id, name, level, position, sessions, hours, wins, games, avail_mode, city, preferred_clubs, elo, elo_peak, avatar, available_now, pref_match_type FROM players').all();
     players.forEach(p => {
       p.preferred_clubs = JSON.parse(p.preferred_clubs || '[]');
       p.peakz_rating = getPeakzRating(p.elo);
@@ -1618,13 +1619,20 @@ app.post('/api/matches/urgent', authenticateToken, (req, res) => {
       const team2 = [selected[1], selected[2]];
 
       const matchId = 'm-' + uuidv4().slice(0, 8);
-      const now = new Date();
-      const dateStr = now.toISOString().split('T')[0];
       
-      const startTimeDate = new Date(now.getTime() + 10 * 60 * 1000);
-      const startStr = startTimeDate.toTimeString().split(' ')[0].slice(0, 5);
-      const endTimeDate = new Date(startTimeDate.getTime() + 90 * 60 * 1000);
-      const endStr = endTimeDate.toTimeString().split(' ')[0].slice(0, 5);
+      const getAmsterdamTime = (offsetMin) => {
+        const d = new Date(Date.now() + offsetMin * 60000);
+        const str = d.toLocaleString('sv-SE', { timeZone: 'Europe/Amsterdam' });
+        const [dateStr, timeStr] = str.split(' ');
+        return { dateStr, timeStr: timeStr.slice(0, 5) };
+      };
+
+      const startObj = getAmsterdamTime(10); // Start in 10 mins
+      const endObj = getAmsterdamTime(10 + 90); // 90 min match
+
+      const dateStr = startObj.dateStr;
+      const startStr = startObj.timeStr;
+      const endStr = endObj.timeStr;
 
       const initialResponses = {};
       selected.forEach(p => {
@@ -1640,9 +1648,15 @@ app.post('/api/matches/urgent', authenticateToken, (req, res) => {
         preferred_clubs: JSON.parse(p.preferred_clubs || '[]')
       })));
 
+      let friendlyVotes = 0;
+      selected.forEach(p => {
+        if (p.pref_match_type === 'friendly') friendlyVotes++;
+      });
+      const finalMatchType = friendlyVotes >= 2 ? 'friendly' : 'ranked';
+
       const insertMatch = db.prepare(`
         INSERT INTO matches (id, status, responses, date, start, end, proposed_teams, match_type, location)
-        VALUES (?, 'proposed', ?, ?, ?, ?, ?, 'friendly', ?)
+        VALUES (?, 'proposed', ?, ?, ?, ?, ?, ?, ?)
       `);
       const insertMatchPlayer = db.prepare(`
         INSERT INTO match_players (match_id, player_id, team_number)
@@ -1650,17 +1664,12 @@ app.post('/api/matches/urgent', authenticateToken, (req, res) => {
       `);
 
       const transaction = db.transaction(() => {
-        insertMatch.run(
-          matchId,
-          JSON.stringify(initialResponses),
-          dateStr,
-          startStr,
-          endStr,
-          JSON.stringify(proposedTeams),
-          commonClub
-        );
-        team1.forEach(p => insertMatchPlayer.run(matchId, p.id, 1));
-        team2.forEach(p => insertMatchPlayer.run(matchId, p.id, 2));
+        insertMatch.run(matchId, JSON.stringify(initialResponses), dateStr, startStr, endStr, JSON.stringify(proposedTeams), finalMatchType, commonClub);
+
+        selected.forEach((p, idx) => {
+          const teamNum = (idx === 0 || idx === 3) ? 1 : 2;
+          insertMatchPlayer.run(matchId, p.id, teamNum);
+        });
 
         // Reset available_now for the matched players
         selected.forEach(p => {

@@ -16,7 +16,7 @@ function calcPadelRating(q1, q2, q3, q4) {
 
 export default function SettingsScreen({ activePlayer, token, onLogout, onRefreshPlayer, language, onChangeLanguage }) {
   const [name, setName] = useState(activePlayer.name);
-  const [pin, setPin] = useState(activePlayer.pin);
+  const [pin, setPin] = useState('');
   const [city, setCity] = useState(activePlayer.city || 'Groningen');
   const [level, setLevel] = useState((10 - activePlayer.level).toString()); // Rating selector mapping
   const [position, setPosition] = useState(activePlayer.position || 'Beide');
@@ -66,6 +66,7 @@ export default function SettingsScreen({ activePlayer, token, onLogout, onRefres
 
   // Friends & Match Mode states
   const [matchMode, setMatchMode] = useState(activePlayer.match_mode || 'open');
+  const [prefMatchType, setPrefMatchType] = useState(activePlayer.pref_match_type || 'ranked');
   const [friendsList, setFriendsList] = useState([]);
   const [friendSearch, setFriendSearch] = useState('');
   const [friendSearchResults, setFriendSearchResults] = useState([]);
@@ -172,7 +173,7 @@ export default function SettingsScreen({ activePlayer, token, onLogout, onRefres
 
   const handleSave = async (e) => {
     e.preventDefault();
-    if (!name.trim() || !pin.trim()) {
+    if (!name.trim()) {
       setErrorMsg(t('fillAllFields'));
       return;
     }
@@ -200,7 +201,8 @@ export default function SettingsScreen({ activePlayer, token, onLogout, onRefres
           avatar,
           pref_playtime: parseInt(prefPlaytime),
           pref_court_type: prefCourtType,
-          match_mode: matchMode
+          match_mode: matchMode,
+          pref_match_type: prefMatchType
         })
       });
       const data = await response.json();
@@ -772,6 +774,7 @@ export default function SettingsScreen({ activePlayer, token, onLogout, onRefres
             <input
               type="password"
               maxLength={4}
+              placeholder="****"
               className="input-field"
               value={pin}
               onChange={(e) => setPin(e.target.value.replace(/\D/g, ''))}
@@ -798,7 +801,7 @@ export default function SettingsScreen({ activePlayer, token, onLogout, onRefres
                 width: '100%',
                 zIndex: 10,
                 marginTop: '4px',
-                background: 'var(--color-card-bg)',
+                background: 'var(--color-bg-dark)',
                 borderRadius: '8px',
                 overflowY: 'auto',
                 maxHeight: '220px',
@@ -862,6 +865,46 @@ export default function SettingsScreen({ activePlayer, token, onLogout, onRefres
             </div>
           </div>
 
+        </div>
+
+        {/* ── Match Type Voorkeur ── */}
+        <div className="glass-panel" style={{ padding: '16px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
+          <h3 style={{ fontSize: '14px', fontWeight: '800', borderBottom: '1px solid rgba(255,255,255,0.06)', paddingBottom: '8px', color: 'var(--color-primary)' }}>
+            {language === 'nl' ? 'Match Type Voorkeur' : 'Match Type Preference'}
+          </h3>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+            {[
+              { value: 'ranked', icon: <Award size={16} />, label: 'Ranked', sub: language === 'nl' ? 'Telt mee voor je Padel Rating.' : 'Affects your Padel Rating.' },
+              { value: 'friendly', icon: <CheckCircle2 size={16} />, label: 'Friendly', sub: language === 'nl' ? 'Spelen voor de lol, geen rating.' : 'Play for fun, no rating.' }
+            ].map(opt => {
+              const active = prefMatchType === opt.value;
+              return (
+                <button
+                  key={opt.value}
+                  type="button"
+                  onClick={() => setPrefMatchType(opt.value)}
+                  style={{
+                    padding: '12px',
+                    borderRadius: '10px',
+                    border: `1px solid ${active ? 'var(--color-primary)' : 'var(--color-border-glass)'}`,
+                    background: active ? 'rgba(212,255,0,0.07)' : 'rgba(255,255,255,0.02)',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    alignItems: 'flex-start',
+                    gap: '4px',
+                    transition: 'all 0.15s ease',
+                    textAlign: 'left'
+                  }}
+                >
+                  <span style={{ color: active ? 'var(--color-primary)' : 'var(--color-text-muted)', display: 'flex', alignItems: 'center', gap: '6px', fontWeight: '700', fontSize: '12px' }}>
+                    {opt.icon} {opt.label}
+                  </span>
+                  <span style={{ fontSize: '10px', color: 'var(--color-text-muted)', lineHeight: '1.4' }}>{opt.sub}</span>
+                </button>
+              );
+            })}
+          </div>
         </div>
 
         {/* ── Match Mode Toggle ── */}

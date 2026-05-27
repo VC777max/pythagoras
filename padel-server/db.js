@@ -152,6 +152,7 @@ try { db.prepare("ALTER TABLE players ADD COLUMN pref_playtime INTEGER NOT NULL 
 try { db.prepare("ALTER TABLE players ADD COLUMN pref_court_type TEXT NOT NULL DEFAULT 'double'").run(); } catch(e) {}
 try { db.prepare("ALTER TABLE notifications ADD COLUMN link_id TEXT").run(); } catch(e) {}
 try { db.prepare("ALTER TABLE players ADD COLUMN match_mode TEXT NOT NULL DEFAULT 'open'").run(); console.log("Added column 'match_mode' to players."); } catch(e) {}
+try { db.prepare("ALTER TABLE players ADD COLUMN pref_match_type TEXT NOT NULL DEFAULT 'ranked'").run(); console.log("Added column 'pref_match_type' to players."); } catch(e) {}
 
 
 // Create indexes to optimize matchmaking and queries

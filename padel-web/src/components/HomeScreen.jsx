@@ -10,6 +10,7 @@ export default function HomeScreen({ activePlayer, token, onRefreshPlayer, langu
   const [confirmingId, setConfirmingId] = useState(null);
   const [liveFriendCount, setLiveFriendCount] = useState(0);
   const [noFriendsAvailable, setNoFriendsAvailable] = useState(false);
+  const [liveDuration, setLiveDuration] = useState('');
 
   const t = (key, replacements) => translate(key, language, replacements);
 
@@ -40,12 +41,33 @@ export default function HomeScreen({ activePlayer, token, onRefreshPlayer, langu
     return () => clearInterval(interval);
   }, [activePlayer.id, token]);
 
+  useEffect(() => {
+    if (activePlayer.available_now !== 1) {
+      setLiveDuration('');
+      return;
+    }
+    if (!localStorage.getItem('live_since')) {
+      localStorage.setItem('live_since', Date.now().toString());
+    }
+    const updateTimer = () => {
+      const start = parseInt(localStorage.getItem('live_since') || Date.now().toString());
+      const diffMs = Date.now() - start;
+      const mins = Math.floor(diffMs / 60000);
+      const secs = Math.floor((diffMs % 60000) / 1000);
+      setLiveDuration(`${mins}:${secs.toString().padStart(2, '0')}`);
+    };
+    updateTimer();
+    const interval = setInterval(updateTimer, 1000);
+    return () => clearInterval(interval);
+  }, [activePlayer.available_now]);
+
   const handleToggleUrgent = async () => {
     setUrgentLoading(true);
     setNoFriendsAvailable(false);
     const newStatus = activePlayer.available_now === 1 ? 0 : 1;
     try {
       if (newStatus === 1) {
+        localStorage.setItem('live_since', Date.now().toString());
         // Going live — trigger matchmaker
         const response = await fetch('/api/matches/urgent', {
           method: 'POST',
@@ -59,6 +81,7 @@ export default function HomeScreen({ activePlayer, token, onRefreshPlayer, langu
         onRefreshPlayer();
         loadActiveMatches();
       } else {
+        localStorage.removeItem('live_since');
         // Going offline
         await fetch(`/api/players/${activePlayer.id}/available-now`, {
           method: 'POST',
@@ -185,6 +208,11 @@ export default function HomeScreen({ activePlayer, token, onRefreshPlayer, langu
             <h3 style={{ fontSize: '14px', fontWeight: '800', display: 'flex', alignItems: 'center', gap: '6px' }}>
               <Zap size={14} style={{ color: activePlayer.available_now === 1 ? 'var(--color-primary)' : 'var(--color-text-muted)' }} />
               {t('liveHourTitle')}
+              {activePlayer.available_now === 1 && liveDuration && (
+                <span style={{ fontSize: '10px', background: 'rgba(212,255,0,0.1)', padding: '2px 6px', borderRadius: '4px', color: 'var(--color-primary)', fontWeight: '700' }}>
+                  {liveDuration}
+                </span>
+              )}
             </h3>
             <p style={{ fontSize: '11px', color: 'var(--color-text-muted)', marginTop: '2px', lineHeight: '1.4' }}>
               {t('liveHourSub', { city: activePlayer.city })}
@@ -312,9 +340,16 @@ export default function HomeScreen({ activePlayer, token, onRefreshPlayer, langu
                         {match.date} • {match.start} - {match.end}
                       </p>
                     </div>
-                    <span className={`badge-chip ${isBooked ? 'primary' : ''}`} style={{ fontSize: '9px' }}>
-                      {match.status.toUpperCase()}
-                    </span>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', alignItems: 'flex-end' }}>
+                      <span className={`badge-chip ${isBooked ? 'primary' : ''}`} style={{ fontSize: '9px' }}>
+                        {match.status.toUpperCase()}
+                      </span>
+                      {match.match_type && (
+                        <span className="badge-chip" style={{ fontSize: '9px', background: match.match_type === 'ranked' ? 'rgba(255,165,0,0.1)' : 'rgba(71,255,117,0.1)', color: match.match_type === 'ranked' ? '#ffb347' : '#47ff75', border: '1px solid currentColor' }}>
+                          {match.match_type.toUpperCase()}
+                        </span>
+                      )}
+                    </div>
                   </div>
 
                   {/* Team Members */}
