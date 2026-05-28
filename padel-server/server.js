@@ -1082,7 +1082,7 @@ function runScheduledMatchmaker() {
       const candidateIntervals = []; // Array of { start, end, duration }
       for (const startStr of sortedStartTimes) {
         const startMin = toMin(startStr);
-        for (const duration of [90, 120]) {
+        for (const duration of [60, 90, 120]) {
           const endMin = startMin + duration;
           if (endMin <= 23 * 60 + 59) { // must end before midnight
             candidateIntervals.push({
