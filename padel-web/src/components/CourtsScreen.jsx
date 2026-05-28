@@ -91,7 +91,7 @@ export default function CourtsScreen({ activePlayer, language }) {
           {t('availableCourtsIn', { city: activePlayer.city || 'Groningen' })}
         </h3>
         <span style={{ fontSize: '11px', color: 'var(--color-primary)', fontWeight: '700' }}>
-          {t('filters')}: {activePlayer.pref_playtime}m • {activePlayer.pref_court_type === 'single' ? 'Single' : 'Double'}
+          {t('filters')}: {(activePlayer.pref_playtime || 90)}m • {activePlayer.pref_court_type === 'single' ? 'Single' : 'Double'}
         </span>
       </div>
 
