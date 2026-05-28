@@ -263,12 +263,13 @@ if (playerCount === 0) {
     VALUES (?, ?, ?, ?, ?, ?, ?)
   `);
 
-  insertPlayer.run('p-melvin', 'Melvin', 7, 'Beide', '1111', 12, 18);
-  insertPlayer.run('p-koen', 'Koen', 6, 'Links', '2222', 10, 16);
-  insertPlayer.run('p-daan', 'Daan', 5, 'Rechts', '3333', 8, 15);
-  insertPlayer.run('p-bas', 'Bas', 5, 'Beide', '4444', 7, 14);
-  insertPlayer.run('p-lucas', 'Lucas', 4, 'Links', '5555', 4, 10);
-  insertPlayer.run('p-sophie', 'Sophie', 6, 'Rechts', '6666', 9, 14);
+  const salt = bcrypt.genSaltSync(10);
+  insertPlayer.run('p-melvin', 'Melvin', 7, 'Beide', bcrypt.hashSync('1111', salt), 12, 18);
+  insertPlayer.run('p-koen', 'Koen', 6, 'Links', bcrypt.hashSync('2222', salt), 10, 16);
+  insertPlayer.run('p-daan', 'Daan', 5, 'Rechts', bcrypt.hashSync('3333', salt), 8, 15);
+  insertPlayer.run('p-bas', 'Bas', 5, 'Beide', bcrypt.hashSync('4444', salt), 7, 14);
+  insertPlayer.run('p-lucas', 'Lucas', 4, 'Links', bcrypt.hashSync('5555', salt), 4, 10);
+  insertPlayer.run('p-sophie', 'Sophie', 6, 'Rechts', bcrypt.hashSync('6666', salt), 9, 14);
 
   // Seed weekly availability
   const insertAvail = db.prepare(`
