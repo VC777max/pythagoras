@@ -183,7 +183,7 @@ export default function App() {
 
   if (showSplash && (!activePlayer || !token)) {
     return (
-      <HeroFuturistic onExplore={() => setShowSplash(false)} />
+      <HeroFuturistic language={language} onExplore={() => setShowSplash(false)} />
     );
   }
 

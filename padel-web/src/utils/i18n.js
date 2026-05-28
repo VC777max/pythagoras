@@ -9,6 +9,7 @@ const translations = {
 
     // Login Screen
     loginHeaderAccess: "Player Access",
+    appSlogan: "Automatic padel matching based on availability and skill level.",
     loginHeaderCreate: "Create Profile",
     loginSubAccess: "Enter your name and PIN to log in",
     loginSubCreate: "Setup your matchmaker profile",
@@ -198,6 +199,7 @@ const translations = {
 
     // Login Screen
     loginHeaderAccess: "Toegang Speler",
+    appSlogan: "Automatische padel-matching op basis van beschikbaarheid en speelsterkte.",
     loginHeaderCreate: "Profiel Aanmaken",
     loginSubAccess: "Vul je naam en pincode in om in te loggen",
     loginSubCreate: "Stel je matchmaker profiel in",

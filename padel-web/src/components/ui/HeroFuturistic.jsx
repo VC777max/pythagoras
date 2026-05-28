@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useMemo, useRef, useState, useEffect } from 'react';
+import { translate } from '../../utils/i18n';
 import { Canvas, extend, useFrame, useThree } from '@react-three/fiber';
 import { useAspect, useTexture } from '@react-three/drei';
 import * as THREE from 'three/webgpu';
@@ -227,9 +228,9 @@ const Scene = () => {
   );
 };
 
-export const HeroFuturistic = ({ onExplore }) => {
+export const HeroFuturistic = ({ onExplore, language = 'nl' }) => {
   const titleWords = 'Padel Matcher'.split(' ');
-  const subtitle = 'Connecting players, scheduling matches, instantly.';
+  const subtitle = translate('appSlogan', language);
   const [visibleWords, setVisibleWords] = useState(0);
   const [subtitleVisible, setSubtitleVisible] = useState(false);
   const [delays, setDelays] = useState([]);

@@ -191,6 +191,18 @@ export default function LoginScreen({ onLoginSuccess, language, onChangeLanguage
             display: 'block'
           }} 
         />
+        <p style={{
+          fontSize: '11px',
+          fontWeight: '800',
+          color: 'var(--color-primary)',
+          letterSpacing: '0.05em',
+          textTransform: 'uppercase',
+          margin: '4px auto 16px auto',
+          maxWidth: '280px',
+          lineHeight: '1.4'
+        }}>
+          {t('appSlogan')}
+        </p>
         <h2 className="header-title" style={{ fontSize: '20px', color: 'var(--color-text-primary)' }}>
           {isRegistering ? t('loginHeaderCreate') : t('loginHeaderAccess')}
         </h2>
