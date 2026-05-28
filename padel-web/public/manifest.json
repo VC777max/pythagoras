@@ -1,0 +1,21 @@
+{
+  "short_name": "Padel Matcher",
+  "name": "Padel Matcher",
+  "icons": [
+    {
+      "src": "/logo.png?v=2",
+      "type": "image/png",
+      "sizes": "192x192"
+    },
+    {
+      "src": "/logo.png?v=2",
+      "type": "image/png",
+      "sizes": "512x512"
+    }
+  ],
+  "start_url": "/",
+  "background_color": "#0d0e12",
+  "theme_color": "#0d0e12",
+  "display": "standalone",
+  "orientation": "portrait"
+}
