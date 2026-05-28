@@ -1095,6 +1095,40 @@ export default function SettingsScreen({ activePlayer, token, onLogout, onRefres
             </div>
           )}
 
+          {/* Preferred Playtime */}
+          <div style={{ marginTop: '12px' }}>
+            <label style={labelStyle}>
+              {language === 'nl' ? 'Voorkeur Speeltijd' : 'Preferred Playtime'}
+            </label>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '8px' }}>
+              {[
+                { value: 60, label: '60 min' },
+                { value: 90, label: '90 min' },
+                { value: 120, label: '120 min' }
+              ].map(opt => (
+                <button
+                  key={opt.value}
+                  type="button"
+                  onClick={() => setPrefPlaytime(opt.value)}
+                  className={`btn-secondary ${prefPlaytime === opt.value ? 'active-pos' : ''}`}
+                  style={{
+                    padding: '8px 0',
+                    borderRadius: '7px',
+                    border: '1px solid',
+                    borderColor: prefPlaytime === opt.value ? 'var(--color-primary)' : 'var(--color-border-glass)',
+                    background: prefPlaytime === opt.value ? 'rgba(212,255,0,0.08)' : 'transparent',
+                    color: prefPlaytime === opt.value ? 'var(--color-primary)' : 'var(--color-text-muted)',
+                    cursor: 'pointer',
+                    fontSize: '12px'
+                  }}
+                  disabled={loading}
+                >
+                  {opt.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
         </div>
 
         {/* ── Match Type Voorkeur ── */}
