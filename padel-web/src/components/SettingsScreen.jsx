@@ -800,10 +800,10 @@ export default function SettingsScreen({ activePlayer, token, onLogout, onRefres
       {/* ── Main Settings Form ── */}
       <form onSubmit={handleSave} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
         
-        {/* Profile Card details */}
+        {/* ── Panel 1: Account & App ── */}
         <div className="glass-panel" style={{ padding: '16px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
           <h3 style={{ fontSize: '14px', fontWeight: '800', borderBottom: '1px solid rgba(255,255,255,0.06)', paddingBottom: '8px', color: 'var(--color-primary)' }}>
-            {t('profileDetails')}
+            {language === 'nl' ? 'Account & App-instellingen' : 'Account & App Settings'}
           </h3>
           
           <div>
@@ -826,6 +826,111 @@ export default function SettingsScreen({ activePlayer, token, onLogout, onRefres
               className="input-field"
               value={pin}
               onChange={(e) => setPin(e.target.value.replace(/\D/g, ''))}
+              disabled={loading}
+            />
+          </div>
+
+          {/* Language Selection */}
+          <div>
+            <label style={labelStyle}>Language / Taal</label>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '8px' }}>
+              <button
+                type="button"
+                onClick={() => onChangeLanguage('nl')}
+                className={`btn-secondary ${language === 'nl' ? 'active-pos' : ''}`}
+                style={{
+                  padding: '8px 0',
+                  fontSize: '12px',
+                  backgroundColor: language === 'nl' ? 'rgba(212, 255, 0, 0.1)' : 'transparent',
+                  borderColor: language === 'nl' ? 'var(--color-primary)' : 'var(--color-border-glass)',
+                  color: language === 'nl' ? 'var(--color-primary)' : 'var(--color-text-primary)'
+                }}
+              >
+                Nederlands
+              </button>
+              <button
+                type="button"
+                onClick={() => onChangeLanguage('en')}
+                className={`btn-secondary ${language === 'en' ? 'active-pos' : ''}`}
+                style={{
+                  padding: '8px 0',
+                  fontSize: '12px',
+                  backgroundColor: language === 'en' ? 'rgba(212, 255, 0, 0.1)' : 'transparent',
+                  borderColor: language === 'en' ? 'var(--color-primary)' : 'var(--color-border-glass)',
+                  color: language === 'en' ? 'var(--color-primary)' : 'var(--color-text-primary)'
+                }}
+              >
+                English
+              </button>
+            </div>
+          </div>
+
+          {/* Avatar Color Picker */}
+          <div>
+            <label style={labelStyle}>{t('avatarAccent')}</label>
+            <div style={{ display: 'flex', gap: '12px' }}>
+              {avatarOptions.map(opt => (
+                <div
+                  key={opt.id}
+                  onClick={() => setAvatar(opt.id)}
+                  style={{
+                    width: '32px',
+                    height: '32px',
+                    borderRadius: '8px',
+                    background: opt.color + '33',
+                    border: avatar === opt.id ? `3px solid ${opt.color}` : `1px solid var(--color-border-glass)`,
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    transition: 'all 0.15s ease'
+                  }}
+                >
+                  {avatar === opt.id && <Check size={14} style={{ color: opt.color }} />}
+                </div>
+              ))}
+            </div>
+          </div>
+
+        </div>
+
+        {/* ── Panel 2: Padel Profiel & Locatie ── */}
+        <div className="glass-panel" style={{ padding: '16px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
+          <h3 style={{ fontSize: '14px', fontWeight: '800', borderBottom: '1px solid rgba(255,255,255,0.06)', paddingBottom: '8px', color: 'var(--color-primary)' }}>
+            {language === 'nl' ? 'Padel Profiel & Locatie' : 'Padel Profile & Location'}
+          </h3>
+
+          {/* Padel Rating with calculator button */}
+          <div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
+              <label style={{ ...labelStyle, marginBottom: 0 }}>
+                {language === 'nl' ? 'Padel Rating (1.0 = sterk, 9.0 = beginner)' : 'Padel Rating (1.0 = strong, 9.0 = beginner)'}
+              </label>
+              <button
+                type="button"
+                onClick={() => { setShowCalculator(true); setCalculatedRating(null); }}
+                style={{
+                  background: 'none',
+                  border: 'none',
+                  color: 'var(--color-primary)',
+                  fontSize: '10px',
+                  fontWeight: '700',
+                  cursor: 'pointer',
+                  textDecoration: 'underline',
+                  padding: 0
+                }}
+              >
+                {t('calculateRatingLink')}
+              </button>
+            </div>
+            <input
+              type="number"
+              className="input-field"
+              min="1"
+              max="9"
+              step="0.5"
+              value={level}
+              onChange={e => setLevel(e.target.value)}
               disabled={loading}
             />
           </div>
@@ -909,40 +1014,49 @@ export default function SettingsScreen({ activePlayer, token, onLogout, onRefres
             )}
           </div>
 
-          {/* Language Selection */}
-          <div>
-            <label style={labelStyle}>Language / Taal</label>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '8px' }}>
-              <button
-                type="button"
-                onClick={() => onChangeLanguage('nl')}
-                className={`btn-secondary ${language === 'nl' ? 'active-pos' : ''}`}
-                style={{
-                  padding: '8px 0',
-                  fontSize: '12px',
-                  backgroundColor: language === 'nl' ? 'rgba(212, 255, 0, 0.1)' : 'transparent',
-                  borderColor: language === 'nl' ? 'var(--color-primary)' : 'var(--color-border-glass)',
-                  color: language === 'nl' ? 'var(--color-primary)' : 'var(--color-text-primary)'
-                }}
-              >
-                Nederlands
-              </button>
-              <button
-                type="button"
-                onClick={() => onChangeLanguage('en')}
-                className={`btn-secondary ${language === 'en' ? 'active-pos' : ''}`}
-                style={{
-                  padding: '8px 0',
-                  fontSize: '12px',
-                  backgroundColor: language === 'en' ? 'rgba(212, 255, 0, 0.1)' : 'transparent',
-                  borderColor: language === 'en' ? 'var(--color-primary)' : 'var(--color-border-glass)',
-                  color: language === 'en' ? 'var(--color-primary)' : 'var(--color-text-primary)'
-                }}
-              >
-                English
-              </button>
+          {/* Preferred Clubs */}
+          {availableClubs.length > 0 && (
+            <div>
+              <label style={labelStyle}>{t('preferredClubs')}</label>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                {availableClubs.map(club => {
+                  const isChecked = preferredClubs.includes(club);
+                  return (
+                    <div
+                      key={club}
+                      onClick={() => handleToggleClub(club)}
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        padding: '10px 12px',
+                        background: 'rgba(0,0,0,0.15)',
+                        border: '1px solid var(--color-border-glass)',
+                        borderRadius: '6px',
+                        cursor: 'pointer',
+                        fontSize: '13px'
+                      }}
+                    >
+                      <span>Padel Club {club}</span>
+                      <div style={{
+                        width: '18px',
+                        height: '18px',
+                        borderRadius: '4px',
+                        border: '1px solid',
+                        borderColor: isChecked ? 'var(--color-primary)' : 'rgba(255,255,255,0.2)',
+                        background: isChecked ? 'rgba(212,255,0,0.1)' : 'transparent',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center'
+                      }}>
+                        {isChecked && <Check size={12} style={{ color: 'var(--color-primary)' }} />}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
             </div>
-          </div>
+          )}
 
         </div>
 
@@ -1260,168 +1374,7 @@ export default function SettingsScreen({ activePlayer, token, onLogout, onRefres
           )}
         </div>
 
-        {/* Play Preferences */}
-        <div className="glass-panel" style={{ padding: '16px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
 
-          <h3 style={{ fontSize: '14px', fontWeight: '800', borderBottom: '1px solid rgba(255,255,255,0.06)', paddingBottom: '8px', color: 'var(--color-primary)' }}>
-            {t('playPreferences')}
-          </h3>
-
-          {/* Padel Rating with calculator button */}
-          <div>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
-              <label style={{ ...labelStyle, marginBottom: 0 }}>
-                {language === 'nl' ? 'Padel Rating (1.0 = sterk, 9.0 = beginner)' : 'Padel Rating (1.0 = strong, 9.0 = beginner)'}
-              </label>
-              <button
-                type="button"
-                onClick={() => { setShowCalculator(true); setCalculatedRating(null); }}
-                style={{
-                  background: 'none',
-                  border: 'none',
-                  color: 'var(--color-primary)',
-                  fontSize: '10px',
-                  fontWeight: '700',
-                  cursor: 'pointer',
-                  textDecoration: 'underline',
-                  padding: 0
-                }}
-              >
-                {t('calculateRatingLink')}
-              </button>
-            </div>
-            <input
-              type="number"
-              className="input-field"
-              min="1"
-              max="9"
-              step="0.5"
-              value={level}
-              onChange={e => setLevel(e.target.value)}
-              disabled={loading}
-            />
-          </div>
-
-          {/* Playtime */}
-          <div>
-            <label style={labelStyle}>{t('preferredPlaytime')}</label>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '8px' }}>
-              {[60, 90, 120].map(tVal => (
-                <button
-                  key={tVal}
-                  type="button"
-                  onClick={() => setPrefPlaytime(tVal)}
-                  className={`btn-secondary ${prefPlaytime === tVal ? 'active-pos' : ''}`}
-                  style={{
-                    padding: '8px 0',
-                    fontSize: '12px',
-                    backgroundColor: prefPlaytime === tVal ? 'rgba(212, 255, 0, 0.1)' : 'transparent',
-                    borderColor: prefPlaytime === tVal ? 'var(--color-primary)' : 'var(--color-border-glass)',
-                    color: prefPlaytime === tVal ? 'var(--color-primary)' : 'var(--color-text-primary)'
-                  }}
-                >
-                  {tVal} {t('min')}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          {/* Court type */}
-          <div>
-            <label style={labelStyle}>{t('preferredCourtType')}</label>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '8px' }}>
-              {['single', 'double'].map(type => (
-                <button
-                  key={type}
-                  type="button"
-                  onClick={() => setPrefCourtType(type)}
-                  className={`btn-secondary ${prefCourtType === type ? 'active-pos' : ''}`}
-                  style={{
-                    padding: '8px 0',
-                    fontSize: '12px',
-                    textTransform: 'capitalize',
-                    backgroundColor: prefCourtType === type ? 'rgba(212, 255, 0, 0.1)' : 'transparent',
-                    borderColor: prefCourtType === type ? 'var(--color-primary)' : 'var(--color-border-glass)',
-                    color: prefCourtType === type ? 'var(--color-primary)' : 'var(--color-text-primary)'
-                  }}
-                >
-                  {type}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          {/* Avatar Color Picker */}
-          <div>
-            <label style={labelStyle}>{t('avatarAccent')}</label>
-            <div style={{ display: 'flex', gap: '12px' }}>
-              {avatarOptions.map(opt => (
-                <div
-                  key={opt.id}
-                  onClick={() => setAvatar(opt.id)}
-                  style={{
-                    width: '32px',
-                    height: '32px',
-                    borderRadius: '8px',
-                    background: opt.color + '33',
-                    border: avatar === opt.id ? `3px solid ${opt.color}` : `1px solid var(--color-border-glass)`,
-                    cursor: 'pointer',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    transition: 'all 0.15s ease'
-                  }}
-                >
-                  {avatar === opt.id && <Check size={14} style={{ color: opt.color }} />}
-                </div>
-              ))}
-            </div>
-          </div>
-
-          {/* Preferred Clubs */}
-          {availableClubs.length > 0 && (
-            <div>
-              <label style={labelStyle}>{t('preferredClubs')}</label>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                {availableClubs.map(club => {
-                  const isChecked = preferredClubs.includes(club);
-                  return (
-                    <div
-                      key={club}
-                      onClick={() => handleToggleClub(club)}
-                      style={{
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'space-between',
-                        padding: '10px 12px',
-                        background: 'rgba(0,0,0,0.15)',
-                        border: '1px solid var(--color-border-glass)',
-                        borderRadius: '6px',
-                        cursor: 'pointer',
-                        fontSize: '13px'
-                      }}
-                    >
-                      <span>Padel Club {club}</span>
-                      <div style={{
-                        width: '18px',
-                        height: '18px',
-                        borderRadius: '4px',
-                        border: '1px solid',
-                        borderColor: isChecked ? 'var(--color-primary)' : 'rgba(255,255,255,0.2)',
-                        background: isChecked ? 'rgba(212,255,0,0.1)' : 'transparent',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center'
-                      }}>
-                        {isChecked && <Check size={12} style={{ color: 'var(--color-primary)' }} />}
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          )}
-        </div>
 
         {/* Message Indicators */}
         {successMsg && (
