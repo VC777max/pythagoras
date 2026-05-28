@@ -14,7 +14,7 @@ function calcPadelRating(q1, q2, q3, q4) {
   return Math.round(rating * 2) / 2; // round to nearest 0.5
 }
 
-export default function SettingsScreen({ activePlayer, token, onLogout, onRefreshPlayer, language, onChangeLanguage }) {
+export default function SettingsScreen({ activePlayer, token, onLogout, onRefreshPlayer, language, onChangeLanguage, isNewPlayer, onClearNewPlayer }) {
   const [name, setName] = useState(activePlayer.name);
   const [pin, setPin] = useState('');
   const [city, setCity] = useState(activePlayer.city || 'Groningen');
@@ -794,6 +794,43 @@ export default function SettingsScreen({ activePlayer, token, onLogout, onRefres
               {t('createPlayer')}
             </button>
           </form>
+        </div>
+      )}
+
+      {isNewPlayer && (
+        <div className="glass-panel" style={{
+          padding: '16px',
+          background: 'rgba(212,255,0,0.08)',
+          border: '1px solid var(--color-primary)',
+          borderRadius: '12px',
+          display: 'flex',
+          flexDirection: 'column',
+          gap: '8px',
+          position: 'relative'
+        }}>
+          <button 
+            type="button" 
+            onClick={onClearNewPlayer}
+            style={{
+              position: 'absolute',
+              top: '12px',
+              right: '12px',
+              background: 'none',
+              border: 'none',
+              color: 'var(--color-primary)',
+              cursor: 'pointer'
+            }}
+          >
+            <X size={16} />
+          </button>
+          <h3 style={{ fontSize: '14px', fontWeight: '900', color: 'var(--color-primary)', margin: 0 }}>
+            {language === 'nl' ? 'Welkom bij Padel Matcher!' : 'Welcome to Padel Matcher!'}
+          </h3>
+          <p style={{ fontSize: '12px', color: 'var(--color-text-primary)', margin: 0, lineHeight: '1.4', paddingRight: '20px' }}>
+            {language === 'nl' 
+              ? 'Vul hieronder direct je voorkeuren in (zoals je favoriete stad, clubs en speeltijd) zodat de automatische matchmaker optimaal voor jou kan zoeken naar geschikte wedstrijden!'
+              : 'Please enter your playing preferences below (such as your city, clubs, and preferred duration) so the automatic matchmaker can find the best matches for you!'}
+          </p>
         </div>
       )}
 

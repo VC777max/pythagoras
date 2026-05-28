@@ -9,7 +9,7 @@ function calcPadelRating(q1, q2, q3, q4) {
   return Math.round(rating * 2) / 2;
 }
 
-export default function LoginScreen({ onLoginSuccess, language, onChangeLanguage }) {
+export default function LoginScreen({ onLoginSuccess, language, onChangeLanguage, joinMatchInfo }) {
   const [isRegistering, setIsRegistering] = useState(false);
   const [name, setName] = useState('');
   const [pin, setPin] = useState('');
@@ -133,7 +133,7 @@ export default function LoginScreen({ onLoginSuccess, language, onChangeLanguage
       if (!response.ok) {
         throw new Error(data.error || 'Server request failed');
       }
-      onLoginSuccess(data);
+      onLoginSuccess(data, isRegistering);
     } catch (err) {
       setError(err.message);
     } finally {
@@ -143,6 +143,26 @@ export default function LoginScreen({ onLoginSuccess, language, onChangeLanguage
 
   return (
     <div className="glass-panel" style={{ padding: '24px', width: '100%', marginTop: '40px', position: 'relative' }}>
+      
+      {joinMatchInfo && (
+        <div style={{
+          background: 'rgba(212,255,0,0.08)',
+          border: '1px solid var(--color-primary)',
+          borderRadius: '12px',
+          padding: '16px',
+          marginBottom: '20px',
+          textAlign: 'center'
+        }}>
+          <h3 style={{ fontSize: '13px', fontWeight: '900', color: 'var(--color-primary)', margin: '0 0 6px 0' }}>
+            {language === 'nl' ? 'Je bent uitgenodigd!' : 'You are invited!'}
+          </h3>
+          <p style={{ fontSize: '12px', color: 'var(--color-text-primary)', margin: 0, lineHeight: '1.4' }}>
+            {language === 'nl'
+              ? `Meld je aan of maak een profiel aan om deel te nemen aan de wedstrijd op ${joinMatchInfo.date} om ${joinMatchInfo.start} bij ${joinMatchInfo.location}.`
+              : `Login or create a profile to join the match on ${joinMatchInfo.date} at ${joinMatchInfo.start} @ ${joinMatchInfo.location}.`}
+          </p>
+        </div>
+      )}
       
       {/* Language Switcher in Login Screen top-right */}
       <div style={{ position: 'absolute', top: '12px', right: '12px', display: 'flex', gap: '6px' }}>

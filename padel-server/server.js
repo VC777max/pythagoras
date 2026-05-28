@@ -1307,6 +1307,214 @@ app.post('/api/matches', (req, res) => {
   }
 });
 
+// POST create manual match proposal (1/4 players initially, or 2/4 if friend is invited)
+app.post('/api/matches/create-manual', authenticateToken, (req, res) => {
+  const { date, start, end, location, match_type, friendId } = req.body;
+  const playerId = req.user.id;
+
+  if (!date || !start) {
+    return res.status(400).json({ error: 'Date and start time are required' });
+  }
+
+  const toMin = (t) => {
+    const [h, m] = t.split(':').map(Number);
+    return h * 60 + m;
+  };
+  const toTimeStr = (min) => {
+    const h = Math.floor(min / 60).toString().padStart(2, '0');
+    const m = (min % 60).toString().padStart(2, '0');
+    return `${h}:${m}`;
+  };
+
+  try {
+    const endVal = end || toTimeStr(toMin(start) + 90);
+    const matchId = 'm-' + uuidv4().slice(0, 8);
+    const locationVal = location || 'Peakz Padel Euroborg';
+    const typeVal = match_type || 'friendly';
+
+    const responses = { [playerId]: 'accepted' };
+    const proposedTeams = { team1: [playerId], team2: [] };
+
+    if (friendId) {
+      responses[friendId] = 'pending';
+      proposedTeams.team2.push(friendId);
+    }
+
+    db.transaction(() => {
+      db.prepare(`
+        INSERT INTO matches (id, status, responses, date, start, end, proposed_teams, match_type, location)
+        VALUES (?, 'proposed', ?, ?, ?, ?, ?, ?, ?)
+      `).run(matchId, JSON.stringify(responses), date, start, endVal, JSON.stringify(proposedTeams), typeVal, locationVal);
+
+      db.prepare(`
+        INSERT INTO match_players (match_id, player_id, team_number)
+        VALUES (?, ?, 1)
+      `).run(matchId, playerId);
+
+      if (friendId) {
+        db.prepare(`
+          INSERT INTO match_players (match_id, player_id, team_number)
+          VALUES (?, ?, 2)
+        `).run(matchId, friendId);
+      }
+    })();
+
+    if (friendId) {
+      const creatorName = db.prepare('SELECT name FROM players WHERE id = ?').get(playerId)?.name || 'Een speler';
+      sendPushNotification(friendId, {
+        title: 'Wedstrijduitnodiging',
+        body: `${creatorName} heeft je uitgenodigd voor een padelwedstrijd op ${date} om ${start}!`,
+        type: 'proposal',
+        matchId
+      }).catch(err => console.error('[NOTIFICATION ERROR]', err));
+    }
+
+    const createdMatch = db.prepare('SELECT * FROM matches WHERE id = ?').get(matchId);
+    createdMatch.responses = JSON.parse(createdMatch.responses);
+    createdMatch.proposed_teams = JSON.parse(createdMatch.proposed_teams);
+
+    return res.status(201).json(createdMatch);
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ error: 'Database error' });
+  }
+});
+
+// GET public match details (accessible without login)
+app.get('/api/matches/:id/public', (req, res) => {
+  const { id } = req.params;
+  try {
+    const match = db.prepare('SELECT * FROM matches WHERE id = ?').get(id);
+    if (!match) {
+      return res.status(404).json({ error: 'Match not found' });
+    }
+
+    const players = db.prepare(`
+      SELECT p.id, p.name, p.level
+      FROM match_players mp
+      JOIN players p ON mp.player_id = p.id
+      WHERE mp.match_id = ?
+    `).all(id);
+
+    return res.json({
+      id: match.id,
+      date: match.date,
+      start: match.start,
+      end: match.end,
+      location: match.location,
+      status: match.status,
+      playersCount: players.length,
+      players: players.map(p => ({ id: p.id, name: p.name, level: 10 - p.level }))
+    });
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ error: 'Database error' });
+  }
+});
+
+// POST join an open manual match
+app.post('/api/matches/:id/join', authenticateToken, (req, res) => {
+  const { id } = req.params;
+  const playerId = req.user.id;
+
+  try {
+    const match = db.prepare('SELECT * FROM matches WHERE id = ?').get(id);
+    if (!match) {
+      return res.status(404).json({ error: 'Match not found' });
+    }
+
+    if (match.status !== 'proposed') {
+      return res.status(400).json({ error: 'Match is already finalized or cancelled' });
+    }
+
+    const currentPlayers = db.prepare('SELECT player_id, team_number FROM match_players WHERE match_id = ?').all(id);
+    if (currentPlayers.length >= 4) {
+      return res.status(400).json({ error: 'Match is already full' });
+    }
+
+    if (currentPlayers.some(p => p.player_id === playerId)) {
+      return res.status(400).json({ error: 'Player is already in this match' });
+    }
+
+    const responses = JSON.parse(match.responses);
+    const proposedTeams = JSON.parse(match.proposed_teams);
+
+    responses[playerId] = 'accepted';
+
+    // Balance teams based on current counts
+    const team1Count = currentPlayers.filter(p => p.team_number === 1).length;
+    const team2Count = currentPlayers.filter(p => p.team_number === 2).length;
+    const teamNum = team1Count <= team2Count ? 1 : 2;
+
+    if (teamNum === 1) {
+      if (!proposedTeams.team1) proposedTeams.team1 = [];
+      proposedTeams.team1.push(playerId);
+    } else {
+      if (!proposedTeams.team2) proposedTeams.team2 = [];
+      proposedTeams.team2.push(playerId);
+    }
+
+    db.transaction(() => {
+      db.prepare(`
+        INSERT INTO match_players (match_id, player_id, team_number)
+        VALUES (?, ?, ?)
+      `).run(id, playerId, teamNum);
+
+      db.prepare(`
+        UPDATE matches
+        SET responses = ?, proposed_teams = ?
+        WHERE id = ?
+      `).run(JSON.stringify(responses), JSON.stringify(proposedTeams), id);
+    })();
+
+    const updatedPlayers = db.prepare('SELECT player_id FROM match_players WHERE match_id = ?').all(id);
+    
+    // Auto-confirm if match reaches 4 players
+    if (updatedPlayers.length === 4) {
+      const sessionId = 's-' + uuidv4().slice(0, 8);
+      const playerIds = updatedPlayers.map(p => p.player_id);
+
+      db.transaction(() => {
+        db.prepare('UPDATE matches SET status = \'confirmed\' WHERE id = ?').run(id);
+        db.prepare(`
+          INSERT INTO sessions (id, date, players, match_id)
+          VALUES (?, ?, ?, ?)
+        `).run(sessionId, match.date, playerIds.join(','), id);
+        
+        // Remove availability now they are booked
+        db.prepare(`UPDATE players SET available_now = 0 WHERE id IN (${playerIds.map(() => '?').join(',')})`).run(...playerIds);
+      })();
+
+      playerIds.forEach(pId => {
+        createNotification(
+          pId,
+          `Je wedstrijd op ${match.date} ${match.start} bij ${match.location.replace("Peakz Padel ", "")} is bevestigd! Wie boekt de baan?`,
+          'confirmed',
+          id
+        );
+      });
+    } else {
+      // Notify other players
+      const joiningPlayer = db.prepare('SELECT name FROM players WHERE id = ?').get(playerId);
+      updatedPlayers.forEach(p => {
+        if (p.player_id !== playerId) {
+          createNotification(
+            p.player_id,
+            `${joiningPlayer.name} heeft zich aangesloten bij de wedstrijd op ${match.date} ${match.start}!`,
+            'proposal',
+            id
+          );
+        }
+      });
+    }
+
+    return res.json({ success: true, message: 'Joined match successfully' });
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ error: 'Database error' });
+  }
+});
+
 app.post('/api/admin/trigger-matchmaker', authenticateToken, requireAdmin, (req, res) => {
   try {
     const proposals = runScheduledMatchmaker();

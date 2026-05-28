@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Award, Calendar, Zap, CheckCircle2, User, ExternalLink, Link2, DollarSign, Users, Wifi } from 'lucide-react';
+import { Award, Calendar, Zap, CheckCircle2, User, ExternalLink, Link2, DollarSign, Users, Wifi, Plus, Share2, X } from 'lucide-react';
 import { translate } from '../utils/i18n';
 
 export default function HomeScreen({ activePlayer, token, onRefreshPlayer, language }) {
@@ -24,7 +24,90 @@ export default function HomeScreen({ activePlayer, token, onRefreshPlayer, langu
   const [submittingScoreId, setSubmittingScoreId] = useState(null);
   const [verifyingMatchId, setVerifyingMatchId] = useState(null);
 
+  // Manual Match Proposal States
+  const [showCreateProposal, setShowCreateProposal] = useState(false);
+  const [proposalDate, setProposalDate] = useState('');
+  const [proposalStart, setProposalStart] = useState('19:00');
+  const [proposalLocation, setProposalLocation] = useState('Peakz Padel Euroborg');
+  const [proposalMatchType, setProposalMatchType] = useState('friendly');
+  const [proposalFriendId, setProposalFriendId] = useState('');
+  const [friendsList, setFriendsList] = useState([]);
+  const [creatingProposal, setCreatingProposal] = useState(false);
+
   const t = (key, replacements) => translate(key, language, replacements);
+
+  const handleCreateProposal = async (e) => {
+    e.preventDefault();
+    if (!proposalDate || !proposalStart) {
+      alert(language === 'nl' ? 'Datum en starttijd zijn verplicht' : 'Date and start time are required');
+      return;
+    }
+    setCreatingProposal(true);
+    try {
+      const response = await fetch('/api/matches/create-manual', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          date: proposalDate,
+          start: proposalStart,
+          location: proposalLocation,
+          match_type: proposalMatchType,
+          friendId: proposalFriendId || undefined
+        })
+      });
+      if (response.ok) {
+        setShowCreateProposal(false);
+        setProposalDate('');
+        setProposalFriendId('');
+        loadActiveMatches();
+        if (onRefreshPlayer) onRefreshPlayer();
+        alert(language === 'nl' ? 'Wedstrijdvoorstel succesvol aangemaakt!' : 'Match proposal successfully created!');
+      } else {
+        const data = await response.json();
+        alert(data.error || 'Fout bij aanmaken');
+      }
+    } catch (err) {
+      console.error(err);
+      alert('Netwerkfout bij aanmaken.');
+    } finally {
+      setCreatingProposal(false);
+    }
+  };
+
+  const handleJoinProposedMatch = async (matchId) => {
+    try {
+      const response = await fetch(`/api/matches/${matchId}/join`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        }
+      });
+      if (response.ok) {
+        alert(language === 'nl' ? 'Je bent succesvol aangemeld voor de wedstrijd!' : 'Successfully joined the match!');
+        loadActiveMatches();
+        if (onRefreshPlayer) onRefreshPlayer();
+      } else {
+        const data = await response.json();
+        alert(data.error || 'Fout bij aanmelden');
+      }
+    } catch (err) {
+      console.error(err);
+      alert('Netwerkfout bij aanmelden.');
+    }
+  };
+
+  const handleShareMatch = (match) => {
+    const text = language === 'nl'
+      ? `Doe mee met mijn padel wedstrijd op ${match.date} om ${match.start} bij ${match.location}! Meld je hier aan: https://padel.iamdoingthings.com/?joinMatch=${match.id}`
+      : `Join my padel match on ${match.date} at ${match.start} @ ${match.location}! Sign up here: https://padel.iamdoingthings.com/?joinMatch=${match.id}`;
+    
+    const url = `https://wa.me/?text=${encodeURIComponent(text)}`;
+    window.open(url, '_blank');
+  };
 
   // Helper to calculate Padel Rating from ELO
   const getPeakzRating = (elo) => {
@@ -109,7 +192,7 @@ export default function HomeScreen({ activePlayer, token, onRefreshPlayer, langu
     }
   };
 
-  // Load live friends count
+  // Load live friends count and list
   useEffect(() => {
     const fetchFriends = async () => {
       if (!token) return;
@@ -117,6 +200,7 @@ export default function HomeScreen({ activePlayer, token, onRefreshPlayer, langu
         const res = await fetch('/api/friends', { headers: { 'Authorization': `Bearer ${token}` } });
         if (res.ok) {
           const friends = await res.json();
+          setFriendsList(friends);
           setLiveFriendCount(friends.filter(f => f.available_now).length);
         }
       } catch (e) { console.error(e); }
@@ -431,6 +515,136 @@ export default function HomeScreen({ activePlayer, token, onRefreshPlayer, langu
         )}
       </div>
 
+      {/* Create Proposal Section */}
+      <div style={{ marginBottom: '20px' }}>
+        {!showCreateProposal ? (
+          <button
+            onClick={() => setShowCreateProposal(true)}
+            className="btn-primary"
+            style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', width: '100%', padding: '12px' }}
+          >
+            <Plus size={16} />
+            {language === 'nl' ? 'NIEUW WEDSTRIJDVOORSTEL' : 'NEW MATCH PROPOSAL'}
+          </button>
+        ) : (
+          <div className="glass-panel" style={{ padding: '20px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+              <h3 style={{ fontSize: '14px', fontWeight: '900', color: 'var(--color-primary)', margin: 0 }}>
+                {language === 'nl' ? 'Nieuw Wedstrijdvoorstel' : 'New Match Proposal'}
+              </h3>
+              <button
+                type="button"
+                onClick={() => setShowCreateProposal(false)}
+                style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--color-text-muted)', padding: '4px' }}
+              >
+                <X size={18} />
+              </button>
+            </div>
+            
+            <form onSubmit={handleCreateProposal} style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+              <div>
+                <label style={{ display: 'block', fontSize: '10px', fontWeight: '700', color: 'var(--color-text-muted)', marginBottom: '4px', textTransform: 'uppercase' }}>
+                  {language === 'nl' ? 'Datum' : 'Date'}
+                </label>
+                <input
+                  type="date"
+                  className="input-field"
+                  required
+                  value={proposalDate}
+                  onChange={(e) => setProposalDate(e.target.value)}
+                  style={{ width: '100%' }}
+                />
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+                <div>
+                  <label style={{ display: 'block', fontSize: '10px', fontWeight: '700', color: 'var(--color-text-muted)', marginBottom: '4px', textTransform: 'uppercase' }}>
+                    {language === 'nl' ? 'Starttijd' : 'Start Time'}
+                  </label>
+                  <input
+                    type="time"
+                    className="input-field"
+                    required
+                    value={proposalStart}
+                    onChange={(e) => setProposalStart(e.target.value)}
+                    style={{ width: '100%' }}
+                  />
+                </div>
+                <div>
+                  <label style={{ display: 'block', fontSize: '10px', fontWeight: '700', color: 'var(--color-text-muted)', marginBottom: '4px', textTransform: 'uppercase' }}>
+                    {language === 'nl' ? 'Type Wedstrijd' : 'Match Type'}
+                  </label>
+                  <select
+                    className="input-field"
+                    value={proposalMatchType}
+                    onChange={(e) => setProposalMatchType(e.target.value)}
+                    style={{ width: '100%' }}
+                  >
+                    <option value="friendly">{language === 'nl' ? 'Vriendschappelijk' : 'Friendly'}</option>
+                    <option value="ranked">{language === 'nl' ? 'Competitief' : 'Ranked'}</option>
+                  </select>
+                </div>
+              </div>
+
+              <div>
+                <label style={{ display: 'block', fontSize: '10px', fontWeight: '700', color: 'var(--color-text-muted)', marginBottom: '4px', textTransform: 'uppercase' }}>
+                  {language === 'nl' ? 'Locatie / Club' : 'Location / Club'}
+                </label>
+                <select
+                  className="input-field"
+                  value={proposalLocation}
+                  onChange={(e) => setProposalLocation(e.target.value)}
+                  style={{ width: '100%' }}
+                >
+                  <option value="Peakz Padel Euroborg">Peakz Padel Euroborg</option>
+                  <option value="Peakz Padel Atoomweg">Peakz Padel Atoomweg</option>
+                  <option value="Peakz Padel Suikerterrein">Peakz Padel Suikerterrein</option>
+                  <option value="Peakz Padel Kauwgomballenkwartier">Peakz Padel Kauwgomballenkwartier</option>
+                  <option value="Peakz Padel Olympiaplein">Peakz Padel Olympiaplein</option>
+                  <option value="Peakz Padel Sloterdijk">Peakz Padel Sloterdijk</option>
+                  <option value="Peakz Padel Zuidoost">Peakz Padel Zuidoost</option>
+                  <option value="Peakz Padel Vechtsebanen">Peakz Padel Vechtsebanen</option>
+                  <option value="Peakz Padel Zeehaenkade">Peakz Padel Zeehaenkade</option>
+                  <option value="Peakz Padel Beursgebouw">Peakz Padel Beursgebouw</option>
+                  <option value="Peakz Padel High Tech Campus">Peakz Padel High Tech Campus</option>
+                  <option value="Peakz Padel Vijfkamplaan">Peakz Padel Vijfkamplaan</option>
+                  <option value="Peakz Padel De Maten">Peakz Padel De Maten</option>
+                  <option value="Peakz Padel Malkenschoten">Peakz Padel Malkenschoten</option>
+                </select>
+              </div>
+
+              <div>
+                <label style={{ display: 'block', fontSize: '10px', fontWeight: '700', color: 'var(--color-text-muted)', marginBottom: '4px', textTransform: 'uppercase' }}>
+                  {language === 'nl' ? 'Vriend Uitnodigen (Optioneel)' : 'Invite Friend (Optional)'}
+                </label>
+                <select
+                  className="input-field"
+                  value={proposalFriendId}
+                  onChange={(e) => setProposalFriendId(e.target.value)}
+                  style={{ width: '100%' }}
+                >
+                  <option value="">{language === 'nl' ? '-- Kies een vriend --' : '-- Choose a friend --'}</option>
+                  {friendsList.map(f => (
+                    <option key={f.id} value={f.id}>
+                      {f.name} (Rating: {(10 - f.level).toFixed(1)})
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <button
+                type="submit"
+                className="btn-primary"
+                disabled={creatingProposal}
+                style={{ width: '100%', marginTop: '8px', padding: '12px' }}
+              >
+                {creatingProposal ? '...' : (language === 'nl' ? 'WEDSTRIJD VOORSTELLEN' : 'PROPOSE MATCH')}
+              </button>
+            </form>
+          </div>
+        )}
+      </div>
+
       {/* Matches List */}
       <div>
         <h3 className="header-title" style={{ fontSize: '13px', color: 'var(--color-text-muted)', marginBottom: '10px' }}>
@@ -477,6 +691,11 @@ export default function HomeScreen({ activePlayer, token, onRefreshPlayer, langu
                       {match.match_type && (
                         <span className="badge-chip" style={{ fontSize: '9px', background: match.match_type === 'ranked' ? 'rgba(255,165,0,0.1)' : 'rgba(71,255,117,0.1)', color: match.match_type === 'ranked' ? '#ffb347' : '#47ff75', border: '1px solid currentColor' }}>
                           {match.match_type.toUpperCase()}
+                        </span>
+                      )}
+                      {match.status === 'proposed' && (
+                        <span className="badge-chip" style={{ fontSize: '9px', background: 'rgba(255,255,255,0.08)', color: 'var(--color-text-primary)', border: '1px solid var(--color-border-glass)' }}>
+                          {match.players.length}/4 {language === 'nl' ? 'spelers' : 'players'}
                         </span>
                       )}
                     </div>
@@ -530,29 +749,69 @@ export default function HomeScreen({ activePlayer, token, onRefreshPlayer, langu
 
                   {/* Proposed match flow */}
                   {match.status === 'proposed' && (
-                    <div style={{ marginTop: '12px' }}>
-                      {match.responses[activePlayer.id] === 'pending' ? (
-                        <div style={{ display: 'flex', gap: '8px' }}>
-                          <button
-                            className="btn-primary"
-                            onClick={() => handleRespondMatch(match.id, 'accepted')}
-                            style={{ flex: 1, padding: '8px 0', fontSize: '12px', background: 'var(--color-primary)', color: '#0f111a', fontWeight: '900', cursor: 'pointer', border: 'none', borderRadius: '6px', textTransform: 'uppercase', letterSpacing: '0.05em' }}
-                          >
-                            {t('accept')}
-                          </button>
-                          <button
-                            className="btn-secondary"
-                            onClick={() => handleRespondMatch(match.id, 'rejected')}
-                            style={{ flex: 1, padding: '8px 0', fontSize: '12px', borderColor: 'var(--color-danger)', color: 'var(--color-danger)', cursor: 'pointer', background: 'transparent', border: '1px solid var(--color-danger)', borderRadius: '6px', textTransform: 'uppercase', fontWeight: '800', letterSpacing: '0.05em' }}
-                          >
-                            {t('decline')}
-                          </button>
-                        </div>
-                      ) : (
-                        <div style={{ padding: '10px', background: 'rgba(212, 255, 0, 0.05)', borderRadius: '6px', border: '1px solid rgba(212, 255, 0, 0.2)', fontSize: '12px', color: 'var(--color-primary)', display: 'flex', alignItems: 'center', gap: '8px', fontWeight: '700' }}>
-                          <CheckCircle2 size={14} style={{ color: 'var(--color-primary)' }} />
-                          <span>{language === 'nl' ? 'JE HEBT GEACCEPTEERD! WACHTEN OP ANDEREN...' : 'YOU ACCEPTED! WAITING FOR OTHERS...'}</span>
-                        </div>
+                    <div style={{ marginTop: '12px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                      {/* If the current player is not a participant and match is incomplete, show Join button */}
+                      {!match.players.some(p => p.id === activePlayer.id) && match.players.length < 4 && (
+                        <button
+                          type="button"
+                          className="btn-primary"
+                          onClick={() => handleJoinProposedMatch(match.id)}
+                          style={{ width: '100%', padding: '8px 0', fontSize: '12px', fontWeight: '900', textTransform: 'uppercase', letterSpacing: '0.05em' }}
+                        >
+                          {language === 'nl' ? 'DEELNEMEN AAN WEDSTRIJD' : 'JOIN MATCH'}
+                        </button>
+                      )}
+
+                      {/* If match is incomplete, show WhatsApp share button */}
+                      {match.players.length < 4 && (
+                        <button
+                          type="button"
+                          className="btn-secondary"
+                          onClick={() => handleShareMatch(match)}
+                          style={{
+                            width: '100%',
+                            padding: '8px 0',
+                            fontSize: '12px',
+                            fontWeight: '800',
+                            borderColor: '#25D366',
+                            color: '#25D366',
+                            background: 'rgba(37, 211, 102, 0.05)',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            gap: '6px'
+                          }}
+                        >
+                          <Share2 size={12} />
+                          {language === 'nl' ? 'DELEN VIA WHATSAPP' : 'SHARE VIA WHATSAPP'}
+                        </button>
+                      )}
+
+                      {/* If player is a participant, show accept/decline or status */}
+                      {match.players.some(p => p.id === activePlayer.id) && (
+                        match.responses[activePlayer.id] === 'pending' ? (
+                          <div style={{ display: 'flex', gap: '8px', width: '100%' }}>
+                            <button
+                              className="btn-primary"
+                              onClick={() => handleRespondMatch(match.id, 'accepted')}
+                              style={{ flex: 1, padding: '8px 0', fontSize: '12px', background: 'var(--color-primary)', color: '#0f111a', fontWeight: '900', cursor: 'pointer', border: 'none', borderRadius: '6px', textTransform: 'uppercase', letterSpacing: '0.05em' }}
+                            >
+                              {t('accept')}
+                            </button>
+                            <button
+                              className="btn-secondary"
+                              onClick={() => handleRespondMatch(match.id, 'rejected')}
+                              style={{ flex: 1, padding: '8px 0', fontSize: '12px', borderColor: 'var(--color-danger)', color: 'var(--color-danger)', cursor: 'pointer', background: 'transparent', border: '1px solid var(--color-danger)', borderRadius: '6px', textTransform: 'uppercase', fontWeight: '800', letterSpacing: '0.05em' }}
+                            >
+                              {t('decline')}
+                            </button>
+                          </div>
+                        ) : (
+                          <div style={{ padding: '10px', background: 'rgba(212, 255, 0, 0.05)', borderRadius: '6px', border: '1px solid rgba(212, 255, 0, 0.2)', fontSize: '12px', color: 'var(--color-primary)', display: 'flex', alignItems: 'center', gap: '8px', fontWeight: '700' }}>
+                            <CheckCircle2 size={14} style={{ color: 'var(--color-primary)' }} />
+                            <span>{language === 'nl' ? 'JE HEBT GEACCEPTEERD! WACHTEN OP ANDEREN...' : 'YOU ACCEPTED! WAITING FOR OTHERS...'}</span>
+                          </div>
+                        )
                       )}
                     </div>
                   )}

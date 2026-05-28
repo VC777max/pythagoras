@@ -11,8 +11,8 @@ self.addEventListener('push', (event) => {
 
   const options = {
     body: data.body,
-    icon: '/react-CHdo91hT.svg', // Default icon mapped from build assets
-    badge: '/react-CHdo91hT.svg',
+    icon: '/logo.png?v=2', // Use logo.png instead of default react logo
+    badge: '/logo.png?v=2',
     vibrate: [100, 50, 100],
     data: {
       linkId: data.linkId,

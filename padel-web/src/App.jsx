@@ -19,19 +19,66 @@ export default function App() {
   const [unreadCount, setUnreadCount] = useState(0);
   const [showNotifications, setShowNotifications] = useState(false);
   const [showSplash, setShowSplash] = useState(true);
+  const [joinMatchId, setJoinMatchId] = useState(null);
+  const [joinMatchInfo, setJoinMatchInfo] = useState(null);
+  const [isNewPlayer, setIsNewPlayer] = useState(false);
+
+  const handleJoinMatch = async (matchId, playerToken) => {
+    try {
+      const res = await fetch(`/api/matches/${matchId}/join`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${playerToken}`
+        }
+      });
+      const data = await res.json();
+      if (res.ok) {
+        alert(language === 'nl' ? 'Je bent succesvol aangemeld voor de wedstrijd!' : 'Successfully joined the match!');
+        // Clear search params
+        window.history.replaceState({}, document.title, "/");
+        setJoinMatchId(null);
+        setJoinMatchInfo(null);
+        setActiveTab('home');
+      } else {
+        alert(data.error || 'Fout bij aanmelden');
+      }
+    } catch (e) {
+      console.error(e);
+    }
+  };
 
   // Load player and token from localStorage on mount
   useEffect(() => {
     const savedPlayer = localStorage.getItem('padel_active_player');
     const savedToken = localStorage.getItem('padel_auth_token');
+    const params = new URLSearchParams(window.location.search);
+    const matchId = params.get('joinMatch');
+
     if (savedPlayer && savedToken) {
       try {
-        setActivePlayer(JSON.parse(savedPlayer));
+        const parsed = JSON.parse(savedPlayer);
+        setActivePlayer(parsed);
         setToken(savedToken);
+        if (matchId) {
+          handleJoinMatch(matchId, savedToken);
+        }
       } catch (e) {
         localStorage.removeItem('padel_active_player');
         localStorage.removeItem('padel_auth_token');
       }
+    } else if (matchId) {
+      setJoinMatchId(matchId);
+      // Fetch public info
+      fetch(`/api/matches/${matchId}/public`)
+        .then(res => res.json())
+        .then(info => {
+          if (!info.error) {
+            setJoinMatchInfo(info);
+            setShowSplash(false);
+          }
+        })
+        .catch(err => console.error(err));
     }
     setLoading(false);
   }, []);
@@ -126,11 +173,22 @@ export default function App() {
     }
   }, [token]);
 
-  const handleLoginSuccess = (data) => {
+  const handleLoginSuccess = (data, isNewReg = false) => {
     setActivePlayer(data.player);
     setToken(data.token);
     localStorage.setItem('padel_active_player', JSON.stringify(data.player));
     localStorage.setItem('padel_auth_token', data.token);
+
+    if (joinMatchId) {
+      handleJoinMatch(joinMatchId, data.token);
+    }
+
+    if (isNewReg) {
+      setIsNewPlayer(true);
+      setActiveTab('settings');
+    } else if (!joinMatchId) {
+      setActiveTab('home');
+    }
   };
 
   const handleLogout = () => {
@@ -194,6 +252,7 @@ export default function App() {
           onLoginSuccess={handleLoginSuccess} 
           language={language} 
           onChangeLanguage={handleChangeLanguage} 
+          joinMatchInfo={joinMatchInfo}
         />
       </div>
     );
@@ -394,6 +453,8 @@ export default function App() {
             onRefreshPlayer={refreshPlayer}
             language={language}
             onChangeLanguage={handleChangeLanguage}
+            isNewPlayer={isNewPlayer}
+            onClearNewPlayer={() => setIsNewPlayer(false)}
           />
         )}
       </div>
