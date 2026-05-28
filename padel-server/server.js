@@ -179,7 +179,7 @@ app.post('/api/login', (req, res) => {
 
 app.get('/api/players', (req, res) => {
   try {
-    const players = db.prepare('SELECT id, name, level, position, sessions, hours, wins, games, avail_mode, city, preferred_clubs, elo, elo_peak, avatar, available_now, match_mode, pref_match_type, allow_large_skill_gap FROM players').all();
+    const players = db.prepare('SELECT id, name, level, position, sessions, hours, wins, games, avail_mode, city, preferred_clubs, elo, elo_peak, avatar, available_now, match_mode, pref_match_type, allow_large_skill_gap, pref_playtime, pref_court_type FROM players').all();
     players.forEach(p => {
       p.preferred_clubs = JSON.parse(p.preferred_clubs || '[]');
       p.peakz_rating = getPeakzRating(p.elo);
