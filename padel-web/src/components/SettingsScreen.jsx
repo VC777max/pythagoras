@@ -24,6 +24,7 @@ export default function SettingsScreen({ activePlayer, token, onLogout, onRefres
   const [prefPlaytime, setPrefPlaytime] = useState(activePlayer.pref_playtime || 90);
   const [prefCourtType, setPrefCourtType] = useState(activePlayer.pref_court_type || 'double');
   const [preferredClubs, setPreferredClubs] = useState(activePlayer.preferred_clubs || []);
+  const [prefCourtEnv, setPrefCourtEnv] = useState(activePlayer.pref_court_env || 'both');
   const [loading, setLoading] = useState(false);
   const [successMsg, setSuccessMsg] = useState('');
   const [errorMsg, setErrorMsg] = useState('');
@@ -74,6 +75,23 @@ export default function SettingsScreen({ activePlayer, token, onLogout, onRefres
   const [friendSearchResults, setFriendSearchResults] = useState([]);
   const [friendSearchLoading, setFriendSearchLoading] = useState(false);
   const [friendMsg, setFriendMsg] = useState('');
+
+  useEffect(() => {
+    if (activePlayer) {
+      setName(activePlayer.name);
+      setCity(activePlayer.city || 'Groningen');
+      setLevel((10 - activePlayer.level).toString());
+      setPosition(activePlayer.position || 'Beide');
+      setAvatar(activePlayer.avatar || 'avatar_01');
+      setPrefPlaytime(activePlayer.pref_playtime || 90);
+      setPrefCourtType(activePlayer.pref_court_type || 'double');
+      setPreferredClubs(activePlayer.preferred_clubs || []);
+      setMatchMode(activePlayer.match_mode || 'open');
+      setPrefMatchType(activePlayer.pref_match_type || 'ranked');
+      setAllowLargeSkillGap(activePlayer.allow_large_skill_gap !== 0);
+      setPrefCourtEnv(activePlayer.pref_court_env || 'both');
+    }
+  }, [activePlayer]);
 
   const t = (key) => translate(key, language);
 
@@ -244,6 +262,7 @@ export default function SettingsScreen({ activePlayer, token, onLogout, onRefres
           avatar,
           pref_playtime: parseInt(prefPlaytime),
           pref_court_type: prefCourtType,
+          pref_court_env: prefCourtEnv,
           match_mode: matchMode,
           pref_match_type: prefMatchType,
           allow_large_skill_gap: allowLargeSkillGap ? 1 : 0
@@ -1118,6 +1137,73 @@ export default function SettingsScreen({ activePlayer, token, onLogout, onRefres
                     borderColor: prefPlaytime === opt.value ? 'var(--color-primary)' : 'var(--color-border-glass)',
                     background: prefPlaytime === opt.value ? 'rgba(212,255,0,0.08)' : 'transparent',
                     color: prefPlaytime === opt.value ? 'var(--color-primary)' : 'var(--color-text-muted)',
+                    cursor: 'pointer',
+                    fontSize: '12px'
+                  }}
+                  disabled={loading}
+                >
+                  {opt.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Preferred Court Environment */}
+          <div style={{ marginTop: '12px' }}>
+            <label style={labelStyle}>
+              {language === 'nl' ? 'Voorkeur Baanomgeving' : 'Preferred Environment'}
+            </label>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '8px' }}>
+              {[
+                { value: 'both', label: language === 'nl' ? 'Beide' : 'Both' },
+                { value: 'indoor', label: language === 'nl' ? 'Binnen' : 'Indoor' },
+                { value: 'outdoor', label: language === 'nl' ? 'Buiten' : 'Outdoor' }
+              ].map(opt => (
+                <button
+                  key={opt.value}
+                  type="button"
+                  onClick={() => setPrefCourtEnv(opt.value)}
+                  className={`btn-secondary ${prefCourtEnv === opt.value ? 'active-pos' : ''}`}
+                  style={{
+                    padding: '8px 0',
+                    borderRadius: '7px',
+                    border: '1px solid',
+                    borderColor: prefCourtEnv === opt.value ? 'var(--color-primary)' : 'var(--color-border-glass)',
+                    background: prefCourtEnv === opt.value ? 'rgba(212,255,0,0.08)' : 'transparent',
+                    color: prefCourtEnv === opt.value ? 'var(--color-primary)' : 'var(--color-text-muted)',
+                    cursor: 'pointer',
+                    fontSize: '12px'
+                  }}
+                  disabled={loading}
+                >
+                  {opt.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Preferred Court Type */}
+          <div style={{ marginTop: '12px' }}>
+            <label style={labelStyle}>
+              {language === 'nl' ? 'Voorkeur Baantype' : 'Preferred Court Type'}
+            </label>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '8px' }}>
+              {[
+                { value: 'double', label: language === 'nl' ? 'Double' : 'Double' },
+                { value: 'single', label: language === 'nl' ? 'Single' : 'Single' }
+              ].map(opt => (
+                <button
+                  key={opt.value}
+                  type="button"
+                  onClick={() => setPrefCourtType(opt.value)}
+                  className={`btn-secondary ${prefCourtType === opt.value ? 'active-pos' : ''}`}
+                  style={{
+                    padding: '8px 0',
+                    borderRadius: '7px',
+                    border: '1px solid',
+                    borderColor: prefCourtType === opt.value ? 'var(--color-primary)' : 'var(--color-border-glass)',
+                    background: prefCourtType === opt.value ? 'rgba(212,255,0,0.08)' : 'transparent',
+                    color: prefCourtType === opt.value ? 'var(--color-primary)' : 'var(--color-text-muted)',
                     cursor: 'pointer',
                     fontSize: '12px'
                   }}

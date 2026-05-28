@@ -6,6 +6,7 @@ export const SCRAPER_LOCATIONS = [
   // Groningen
   { 
     name: 'Atoomweg', 
+    slug: 'Groningen - Atoomweg',
     city: 'Groningen', 
     indoor: true, 
     courtTypeIds: {
@@ -15,6 +16,7 @@ export const SCRAPER_LOCATIONS = [
   },
   { 
     name: 'Euroborg', 
+    slug: 'Groningen - Euroborg',
     city: 'Groningen', 
     indoor: true, 
     courtTypeIds: {
@@ -24,6 +26,7 @@ export const SCRAPER_LOCATIONS = [
   },
   { 
     name: 'Suikerterrein', 
+    slug: 'Groningen - Suikerterrein',
     city: 'Groningen', 
     indoor: false, 
     courtTypeIds: {
@@ -34,6 +37,7 @@ export const SCRAPER_LOCATIONS = [
   // Amsterdam
   { 
     name: 'Kauwgomballenkwartier', 
+    slug: 'Amsterdam - Kauwgomballenkwartier',
     city: 'Amsterdam', 
     indoor: false, 
     courtTypeIds: {
@@ -43,6 +47,7 @@ export const SCRAPER_LOCATIONS = [
   },
   { 
     name: 'Olympiaplein', 
+    slug: 'Amsterdam - Olympiaplein',
     city: 'Amsterdam', 
     indoor: false, 
     courtTypeIds: {
@@ -52,6 +57,7 @@ export const SCRAPER_LOCATIONS = [
   },
   { 
     name: 'Sloterdijk', 
+    slug: 'Amsterdam - Sloterdijk',
     city: 'Amsterdam', 
     indoor: false, 
     courtTypeIds: {
@@ -61,6 +67,7 @@ export const SCRAPER_LOCATIONS = [
   },
   { 
     name: 'Zuidoost', 
+    slug: 'Amsterdam - Zuidoost',
     city: 'Amsterdam', 
     indoor: true, 
     courtTypeIds: {
@@ -71,6 +78,7 @@ export const SCRAPER_LOCATIONS = [
   // Utrecht
   { 
     name: 'Vechtsebanen', 
+    slug: 'Utrecht - Vechtsebanen',
     city: 'Utrecht', 
     indoor: true, 
     courtTypeIds: {
@@ -80,6 +88,7 @@ export const SCRAPER_LOCATIONS = [
   },
   { 
     name: 'Zeehaenkade', 
+    slug: 'Utrecht - Zeehaenkade',
     city: 'Utrecht', 
     indoor: true, 
     courtTypeIds: {

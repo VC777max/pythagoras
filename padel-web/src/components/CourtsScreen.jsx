@@ -34,9 +34,10 @@ export default function CourtsScreen({ activePlayer, language }) {
     const city = activePlayer.city || 'Groningen';
     const playtime = activePlayer.pref_playtime || 90;
     const courtType = activePlayer.pref_court_type || 'double';
+    const courtEnv = activePlayer.pref_court_env || 'both';
 
     try {
-      const response = await fetch(`/api/courts?date=${dateStr}&city=${city}&playtime=${playtime}&court_type=${courtType}`);
+      const response = await fetch(`/api/courts?date=${dateStr}&city=${city}&playtime=${playtime}&court_type=${courtType}&court_env=${courtEnv}`);
       if (response.ok) {
         const data = await response.json();
         setCourts(data);
@@ -50,7 +51,7 @@ export default function CourtsScreen({ activePlayer, language }) {
 
   useEffect(() => {
     loadCourts(datesList[selectedTab].formatted);
-  }, [selectedTab, activePlayer.pref_playtime, activePlayer.pref_court_type, activePlayer.city]);
+  }, [selectedTab, activePlayer.pref_playtime, activePlayer.pref_court_type, activePlayer.pref_court_env, activePlayer.city]);
 
   const getWeatherIcon = (code) => {
     if (code >= 50) return <CloudRain size={14} style={{ color: 'var(--color-danger)' }} />;
@@ -91,7 +92,7 @@ export default function CourtsScreen({ activePlayer, language }) {
           {t('availableCourtsIn', { city: activePlayer.city || 'Groningen' })}
         </h3>
         <span style={{ fontSize: '11px', color: 'var(--color-primary)', fontWeight: '700' }}>
-          {t('filters')}: {(activePlayer.pref_playtime || 90)}m • {activePlayer.pref_court_type === 'single' ? 'Single' : 'Double'}
+          {t('filters')}: {(activePlayer.pref_playtime || 90)}m • {activePlayer.pref_court_type === 'single' ? 'Single' : 'Double'} • {activePlayer.pref_court_env === 'indoor' ? (language === 'nl' ? 'Binnen' : 'Indoor') : activePlayer.pref_court_env === 'outdoor' ? (language === 'nl' ? 'Buiten' : 'Outdoor') : (language === 'nl' ? 'Beide' : 'Both')}
         </span>
       </div>
 

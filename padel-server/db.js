@@ -150,6 +150,7 @@ try { db.prepare("ALTER TABLE players ADD COLUMN avatar TEXT NOT NULL DEFAULT 'a
 try { db.prepare("ALTER TABLE players ADD COLUMN available_now INTEGER NOT NULL DEFAULT 0").run(); } catch(e) {}
 try { db.prepare("ALTER TABLE players ADD COLUMN pref_playtime INTEGER NOT NULL DEFAULT 90").run(); } catch(e) {}
 try { db.prepare("ALTER TABLE players ADD COLUMN pref_court_type TEXT NOT NULL DEFAULT 'double'").run(); } catch(e) {}
+try { db.prepare("ALTER TABLE players ADD COLUMN pref_court_env TEXT NOT NULL DEFAULT 'both'").run(); } catch(e) {}
 try { db.prepare("ALTER TABLE notifications ADD COLUMN link_id TEXT").run(); } catch(e) {}
 try { db.prepare("ALTER TABLE players ADD COLUMN match_mode TEXT NOT NULL DEFAULT 'open'").run(); console.log("Added column 'match_mode' to players."); } catch(e) {}
 try { db.prepare("ALTER TABLE players ADD COLUMN pref_match_type TEXT NOT NULL DEFAULT 'ranked'").run(); console.log("Added column 'pref_match_type' to players."); } catch(e) {}

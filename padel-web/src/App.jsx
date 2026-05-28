@@ -376,7 +376,11 @@ export default function App() {
                             headers: { 'Authorization': `Bearer ${token}` }
                           }).then(() => loadNotifications());
                         }
-                        setActiveTab('home');
+                        if (notif.link_id === '/settings') {
+                          setActiveTab('settings');
+                        } else {
+                          setActiveTab('home');
+                        }
                         setShowNotifications(false);
                       }}
                       style={{

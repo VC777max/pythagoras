@@ -7,7 +7,7 @@ import db from './db.js';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import webpush from 'web-push';
-import { getAvailability } from './peakz-scraper.js';
+import { getAvailability, SCRAPER_LOCATIONS } from './peakz-scraper.js';
 
 const app = express();
 app.use(cors());
@@ -70,17 +70,68 @@ const getPeakzRating = (elo) => {
   return parseFloat(Math.max(1.0, Math.min(10.0, rating)).toFixed(1));
 };
 
+function getClubEnvironment(clubName) {
+  const loc = SCRAPER_LOCATIONS.find(l => l.name.toLowerCase() === clubName.toLowerCase());
+  if (loc) {
+    return loc.indoor ? 'indoor' : 'outdoor';
+  }
+  // Hardcoded fallback list if not in SCRAPER_LOCATIONS
+  const outdoorClubs = ['Suikerterrein', 'Sloterdijk', 'Kauwgomballenkwartier', 'Olympiaplein', 'Malkenschoten', 'High Tech Campus'];
+  if (outdoorClubs.some(oc => clubName.toLowerCase().includes(oc.toLowerCase()))) {
+    return 'outdoor';
+  }
+  return 'indoor';
+}
+
+function hasCommonCompatibleClub(city, group) {
+  const cityClubs = CITIES_CLUBS[city] || ['Peakz Court'];
+  let common = [...cityClubs];
+  for (const p of group) {
+    if (p.preferred_clubs && p.preferred_clubs.length > 0) {
+      const prefs = typeof p.preferred_clubs === 'string' ? JSON.parse(p.preferred_clubs) : p.preferred_clubs;
+      if (prefs && prefs.length > 0) {
+        common = common.filter(club => prefs.includes(club));
+      }
+    }
+    if (p.pref_court_env && p.pref_court_env !== 'both') {
+      common = common.filter(club => getClubEnvironment(club) === p.pref_court_env);
+    }
+  }
+  return common.length > 0;
+}
+
 // Helper: Find a club overlapping in all players preferred lists
 function findCommonClub(city, selectedPlayers) {
   const cityClubs = CITIES_CLUBS[city] || ['Peakz Court'];
   let common = [...cityClubs];
   for (const p of selectedPlayers) {
     if (p.preferred_clubs && p.preferred_clubs.length > 0) {
-      common = common.filter(club => p.preferred_clubs.includes(club));
+      const prefs = typeof p.preferred_clubs === 'string' ? JSON.parse(p.preferred_clubs) : p.preferred_clubs;
+      if (prefs && prefs.length > 0) {
+        common = common.filter(club => prefs.includes(club));
+      }
+    }
+    if (p.pref_court_env && p.pref_court_env !== 'both') {
+      common = common.filter(club => getClubEnvironment(club) === p.pref_court_env);
     }
   }
   if (common.length > 0) {
     return `Peakz Padel ${common[0]}`;
+  }
+  // Fallback to the first club compatible with environment preferences (if possible)
+  for (const club of cityClubs) {
+    let compatible = true;
+    for (const p of selectedPlayers) {
+      if (p.pref_court_env && p.pref_court_env !== 'both') {
+        if (getClubEnvironment(club) !== p.pref_court_env) {
+          compatible = false;
+          break;
+        }
+      }
+    }
+    if (compatible) {
+      return `Peakz Padel ${club}`;
+    }
   }
   return `Peakz Padel ${cityClubs[0]}`;
 }
@@ -179,7 +230,7 @@ app.post('/api/login', (req, res) => {
 
 app.get('/api/players', (req, res) => {
   try {
-    const players = db.prepare('SELECT id, name, level, position, sessions, hours, wins, games, avail_mode, city, preferred_clubs, elo, elo_peak, avatar, available_now, match_mode, pref_match_type, allow_large_skill_gap, pref_playtime, pref_court_type FROM players').all();
+    const players = db.prepare('SELECT id, name, level, position, sessions, hours, wins, games, avail_mode, city, preferred_clubs, elo, elo_peak, avatar, available_now, match_mode, pref_match_type, allow_large_skill_gap, pref_playtime, pref_court_type, pref_court_env FROM players').all();
     players.forEach(p => {
       p.preferred_clubs = JSON.parse(p.preferred_clubs || '[]');
       p.peakz_rating = getPeakzRating(p.elo);
@@ -240,7 +291,7 @@ app.post('/api/register', registerHandler);
 // Update player profile/settings
 app.put('/api/players/:id', authenticateToken, (req, res) => {
   const { id } = req.params;
-  const { name, level, position, pin, city, preferred_clubs, avatar, pref_playtime, pref_court_type, match_mode, pref_match_type, allow_large_skill_gap } = req.body;
+  const { name, level, position, pin, city, preferred_clubs, avatar, pref_playtime, pref_court_type, match_mode, pref_match_type, allow_large_skill_gap, pref_court_env } = req.body;
 
   if (!name || level === undefined || !city) {
     return res.status(400).json({ error: 'Name, level, and city are required' });
@@ -259,6 +310,7 @@ app.put('/api/players/:id', authenticateToken, (req, res) => {
 
     const playtime = pref_playtime !== undefined ? parseInt(pref_playtime) : 90;
     const courtType = pref_court_type || 'double';
+    const courtEnv = pref_court_env || 'both';
     const matchModeVal = (match_mode === 'friends' || match_mode === 'open') ? match_mode : (playerExists.match_mode || 'open');
     const prefMatchVal = (pref_match_type === 'friendly' || pref_match_type === 'ranked') ? pref_match_type : (playerExists.pref_match_type || 'ranked');
     const allowSkillGapVal = allow_large_skill_gap !== undefined ? parseInt(allow_large_skill_gap) : (playerExists.allow_large_skill_gap !== undefined ? playerExists.allow_large_skill_gap : 1);
@@ -282,9 +334,9 @@ app.put('/api/players/:id', authenticateToken, (req, res) => {
 
     db.prepare(`
       UPDATE players
-      SET name = ?, level = ?, position = ?, pin = ?, city = ?, preferred_clubs = ?, avatar = ?, pref_playtime = ?, pref_court_type = ?, elo = ?, elo_peak = ?, match_mode = ?, pref_match_type = ?, allow_large_skill_gap = ?
+      SET name = ?, level = ?, position = ?, pin = ?, city = ?, preferred_clubs = ?, avatar = ?, pref_playtime = ?, pref_court_type = ?, elo = ?, elo_peak = ?, match_mode = ?, pref_match_type = ?, allow_large_skill_gap = ?, pref_court_env = ?
       WHERE id = ?
-    `).run(name, dbLevel, position || playerExists.position, savedPin, city, JSON.stringify(preferred_clubs || []), avatar || 'avatar_01', playtime, courtType, eloVal, eloPeakVal, matchModeVal, prefMatchVal, allowSkillGapVal, id);
+    `).run(name, dbLevel, position || playerExists.position, savedPin, city, JSON.stringify(preferred_clubs || []), avatar || 'avatar_01', playtime, courtType, eloVal, eloPeakVal, matchModeVal, prefMatchVal, allowSkillGapVal, courtEnv, id);
 
     const updatedPlayer = db.prepare('SELECT * FROM players WHERE id = ?').get(id);
     updatedPlayer.preferred_clubs = JSON.parse(updatedPlayer.preferred_clubs || '[]');
@@ -546,7 +598,7 @@ app.get('/api/players/search', authenticateToken, (req, res) => {
 // GET all players with stats and ELO
 app.get('/api/admin/players', authenticateToken, requireAdmin, (req, res) => {
   try {
-    const players = db.prepare('SELECT id, name, level, position, sessions, hours, wins, games, avail_mode, city, preferred_clubs, elo, elo_peak, avatar, available_now, pref_match_type FROM players').all();
+    const players = db.prepare('SELECT id, name, level, position, sessions, hours, wins, games, avail_mode, city, preferred_clubs, elo, elo_peak, avatar, available_now, pref_match_type, pref_court_env FROM players').all();
     players.forEach(p => {
       p.preferred_clubs = JSON.parse(p.preferred_clubs || '[]');
       p.peakz_rating = getPeakzRating(p.elo);
@@ -1172,6 +1224,9 @@ function runScheduledMatchmaker() {
                 }
                 if (!isValidFriends) continue;
 
+                // Validate club compatibility (preferred clubs & indoor/outdoor environment preferences)
+                if (!hasCommonCompatibleClub(city, group)) continue;
+
                 // All constraints passed! Score by ELO difference (smaller is better).
                 candidateGroups.push({
                   interval: interval,
@@ -1537,17 +1592,62 @@ app.post('/api/admin/trigger-matchmaker', authenticateToken, requireAdmin, (req,
   }
 });
 
+function checkAndSendSundayReminder() {
+  try {
+    const tzOptions = { timeZone: 'Europe/Amsterdam', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false, weekday: 'short' };
+    const formatter = new Intl.DateTimeFormat('en-US', tzOptions);
+    const parts = formatter.formatToParts(new Date());
+    
+    const map = {};
+    parts.forEach(p => { map[p.type] = p.value; });
+    const weekday = map.weekday; // 'Sun', 'Mon', etc.
+    const hour = parseInt(map.hour || '0');
+    const dateStr = `${map.year}-${map.month}-${map.day}`;
+    
+    if (weekday === 'Sun' && hour >= 20) {
+      // Check database settings to see if we already sent for this date
+      const record = db.prepare("SELECT value FROM settings WHERE key = 'last_sunday_reminder_date'").get();
+      if (!record || record.value !== dateStr) {
+        console.log(`[SUNDAY REMINDER] Sending availability reminders to all players for Sunday ${dateStr}`);
+        
+        // Fetch all players
+        const players = db.prepare("SELECT id FROM players").all();
+        players.forEach(p => {
+          try {
+            createNotification(
+              p.id,
+              "Vergeet niet je beschikbaarheid voor volgende week door te geven!",
+              "reminder",
+              "/settings"
+            );
+          } catch (e) {
+            console.error(`Failed to send Sunday reminder to player ${p.id}:`, e);
+          }
+        });
+        
+        // Mark as sent
+        db.prepare("INSERT OR REPLACE INTO settings (key, value) VALUES ('last_sunday_reminder_date', ?)")
+          .run(dateStr);
+      }
+    }
+  } catch (err) {
+    console.error('[SUNDAY REMINDER ERROR]', err);
+  }
+}
+
 // Run scheduled matchmaker once on startup and then every 15 minutes
 try {
   runScheduledMatchmaker();
+  checkAndSendSundayReminder();
 } catch (err) {
-  console.error('[BACKGROUND MATCHMAKER ON STARTUP ERROR]', err);
+  console.error('[BACKGROUND ON STARTUP ERROR]', err);
 }
 setInterval(() => {
   try {
     runScheduledMatchmaker();
+    checkAndSendSundayReminder();
   } catch (err) {
-    console.error('[BACKGROUND MATCHMAKER ERROR]', err);
+    console.error('[BACKGROUND INTERVAL ERROR]', err);
   }
 }, 15 * 60 * 1000);
 
@@ -2388,10 +2488,18 @@ app.post('/api/matches/urgent', authenticateToken, (req, res) => {
       return true;
     });
 
-    if (availableOthers.length >= 3) {
-      // Sort to get players closest in level
-      availableOthers.sort((a, b) => Math.abs(a.level - requester.level) - Math.abs(b.level - requester.level));
-      const selected = [requester, ...availableOthers.slice(0, 3)];
+    // Sort to get players closest in level
+    availableOthers.sort((a, b) => Math.abs(a.level - requester.level) - Math.abs(b.level - requester.level));
+
+    const selected = [requester];
+    for (const p of availableOthers) {
+      if (selected.length === 4) break;
+      if (hasCommonCompatibleClub(requester.city, [...selected, p])) {
+        selected.push(p);
+      }
+    }
+
+    if (selected.length === 4) {
 
       // Sort by ELO to balance teams
       selected.sort((a, b) => a.elo - b.elo);
@@ -2425,7 +2533,8 @@ app.post('/api/matches/urgent', authenticateToken, (req, res) => {
       };
 
       const commonClub = findCommonClub(requester.city, selected.map(p => ({
-        preferred_clubs: JSON.parse(p.preferred_clubs || '[]')
+        preferred_clubs: JSON.parse(p.preferred_clubs || '[]'),
+        pref_court_env: p.pref_court_env
       })));
 
       let friendlyVotes = 0;
@@ -2589,7 +2698,7 @@ const weatherCache = {}; // key: "lat_lon_date" -> { data: weatherInfo, expiry: 
 
 // Peakz Courts Finder
 app.get('/api/courts', async (req, res) => {
-  const { date, city, playtime: reqPlaytime, court_type: reqCourtType } = req.query; // YYYY-MM-DD
+  const { date, city, playtime: reqPlaytime, court_type: reqCourtType, court_env: reqCourtEnv } = req.query; // YYYY-MM-DD
   if (!date) {
     return res.status(400).json({ error: 'date query param is required' });
   }
@@ -2647,7 +2756,17 @@ app.get('/api/courts', async (req, res) => {
   };
 
   const selectedCity = city || 'Groningen';
-  const locations = CITIES_CLUBS[selectedCity] || ['Peakz Court'];
+  let locations = CITIES_CLUBS[selectedCity] || ['Peakz Court'];
+  
+  const envPref = reqCourtEnv || 'both';
+  if (envPref !== 'both') {
+    locations = locations.filter(loc => {
+      const isLocOutdoor = (loc === 'Suikerterrein' || loc === 'Sloterdijk' || loc === 'Kauwgomballenkwartier' || loc === 'Olympiaplein' || loc === 'Malkenschoten' || loc === 'High Tech Campus');
+      const locEnv = isLocOutdoor ? 'outdoor' : 'indoor';
+      return locEnv === envPref;
+    });
+  }
+
   const times = ['17:00', '18:30', '19:30', '20:00', '21:00', '21:30'];
   
   const results = [];
