@@ -995,7 +995,7 @@ function runScheduledMatchmaker() {
     // 1. Fetch weekly recurring availability
     const weekly = db.prepare(`
       SELECT a.player_id, a.start_time, a.end_time, a.duration,
-             p.name, p.level, p.elo, p.city, p.preferred_clubs, p.rejected_slots, p.pref_match_type, p.match_mode, p.allow_large_skill_gap
+             p.name, p.level, p.elo, p.city, p.preferred_clubs, p.rejected_slots, p.pref_match_type, p.match_mode, p.allow_large_skill_gap, p.pref_playtime, p.pref_court_type
       FROM player_availability a
       JOIN players p ON a.player_id = p.id
       WHERE LOWER(a.day_name) = ?
@@ -1004,7 +1004,7 @@ function runScheduledMatchmaker() {
     // 2. Fetch one-time date-specific availability
     const once = db.prepare(`
       SELECT a.player_id, a.start_time, a.end_time, a.duration,
-             p.name, p.level, p.elo, p.city, p.preferred_clubs, p.rejected_slots, p.pref_match_type, p.match_mode, p.allow_large_skill_gap
+             p.name, p.level, p.elo, p.city, p.preferred_clubs, p.rejected_slots, p.pref_match_type, p.match_mode, p.allow_large_skill_gap, p.pref_playtime, p.pref_court_type
       FROM player_availability_once a
       JOIN players p ON a.player_id = p.id
       WHERE a.date = ?
@@ -1035,7 +1035,9 @@ function runScheduledMatchmaker() {
             rejected_slots: row.rejected_slots,
             pref_match_type: row.pref_match_type,
             match_mode: row.match_mode,
-            allow_large_skill_gap: row.allow_large_skill_gap !== undefined && row.allow_large_skill_gap !== null ? row.allow_large_skill_gap : 1
+            allow_large_skill_gap: row.allow_large_skill_gap !== undefined && row.allow_large_skill_gap !== null ? row.allow_large_skill_gap : 1,
+            pref_playtime: row.pref_playtime !== undefined && row.pref_playtime !== null ? parseInt(row.pref_playtime) : 90,
+            pref_court_type: row.pref_court_type || 'double'
           },
           windows: []
         };
@@ -1118,6 +1120,12 @@ function runScheduledMatchmaker() {
             timeOverlap(match.start, match.end, slotStart, slotEnd)
           );
           if (busy) return false;
+
+          // 4. Preferred playtime matches this candidate slot's duration (90 or 120)
+          if (player.pref_playtime !== interval.duration) return false;
+
+          // 5. Preferred court type is not single (matchmaker only does double 4-player matches)
+          if (player.pref_court_type === 'single') return false;
 
           return true;
         }).map(pi => pi.player);
@@ -2368,6 +2376,18 @@ app.post('/api/matches/urgent', authenticateToken, (req, res) => {
       `).all(player_id, requester.city, requester.level);
     }
 
+    // Filter by playtime and court preferences
+    const reqPlaytime = requester.pref_playtime !== undefined && requester.pref_playtime !== null ? parseInt(requester.pref_playtime) : 90;
+    availableOthers = availableOthers.filter(p => {
+      const otherPlaytime = p.pref_playtime !== undefined && p.pref_playtime !== null ? parseInt(p.pref_playtime) : 90;
+      if (otherPlaytime !== reqPlaytime) return false;
+
+      const otherCourt = p.pref_court_type || 'double';
+      if (otherCourt === 'single') return false;
+
+      return true;
+    });
+
     if (availableOthers.length >= 3) {
       // Sort to get players closest in level
       availableOthers.sort((a, b) => Math.abs(a.level - requester.level) - Math.abs(b.level - requester.level));
@@ -2388,7 +2408,7 @@ app.post('/api/matches/urgent', authenticateToken, (req, res) => {
       };
 
       const startObj = getAmsterdamTime(10); // Start in 10 mins
-      const endObj = getAmsterdamTime(10 + 90); // 90 min match
+      const endObj = getAmsterdamTime(10 + reqPlaytime); // match duration matching their preference!
 
       const dateStr = startObj.dateStr;
       const startStr = startObj.timeStr;
