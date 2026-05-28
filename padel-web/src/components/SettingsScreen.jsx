@@ -1661,6 +1661,18 @@ export default function SettingsScreen({ activePlayer, token, onLogout, onRefres
           </div>
         </div>
       )}
+
+      <div style={{
+        marginTop: '16px',
+        padding: '12px 0 4px 0',
+        textAlign: 'center',
+        fontSize: '11px',
+        color: 'var(--color-text-muted)',
+        borderTop: '1px solid rgba(255,255,255,0.05)',
+        letterSpacing: '0.5px'
+      }}>
+        Padel Matcher App · v1.4.0 (874fdfc)
+      </div>
       
     </div>
   );
