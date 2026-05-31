@@ -763,7 +763,10 @@ app.delete('/api/admin/players/:id', authenticateToken, requireAdmin, (req, res)
       return res.status(404).json({ error: 'Player not found' });
     }
 
-    db.prepare('DELETE FROM players WHERE id = ?').run(id);
+    db.transaction(() => {
+      db.prepare("UPDATE matches SET booker_name = 'Verwijderde Speler', booker_id = NULL WHERE booker_id = ?").run(id);
+      db.prepare('DELETE FROM players WHERE id = ?').run(id);
+    })();
     return res.json({ success: true, message: 'Player deleted successfully' });
   } catch (err) {
     console.error(err);
@@ -781,7 +784,10 @@ app.delete('/api/players/:id', authenticateToken, (req, res) => {
       return res.status(404).json({ error: 'Player not found' });
     }
 
-    db.prepare('DELETE FROM players WHERE id = ?').run(id);
+    db.transaction(() => {
+      db.prepare("UPDATE matches SET booker_name = 'Verwijderde Speler', booker_id = NULL WHERE booker_id = ?").run(id);
+      db.prepare('DELETE FROM players WHERE id = ?').run(id);
+    })();
     return res.json({ success: true, message: 'Your profile has been deleted successfully' });
   } catch (err) {
     console.error(err);

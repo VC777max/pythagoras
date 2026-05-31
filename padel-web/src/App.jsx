@@ -202,7 +202,11 @@ export default function App() {
   const refreshPlayer = async () => {
     if (!activePlayer || !token) return;
     try {
-      const response = await fetch(`/api/players`);
+      const response = await fetch(`/api/players`, {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
       if (response.ok) {
         const playersList = await response.json();
         const freshData = playersList.find(p => p.id === activePlayer.id);
