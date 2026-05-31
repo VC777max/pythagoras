@@ -1,12 +1,11 @@
 import { chromium } from 'playwright';
 
 // Location mapping based on Peakz Padel clubs
-// Maps specific court configuration types to their respective Peakz courtTypeIds
 export const SCRAPER_LOCATIONS = [
   // Groningen
   { 
     name: 'Atoomweg', 
-    slug: 'Groningen - Atoomweg',
+    slug: 'Atoomweg',
     city: 'Groningen', 
     indoor: true, 
     courtTypeIds: {
@@ -16,7 +15,7 @@ export const SCRAPER_LOCATIONS = [
   },
   { 
     name: 'Euroborg', 
-    slug: 'Groningen - Euroborg',
+    slug: 'Euroborg',
     city: 'Groningen', 
     indoor: true, 
     courtTypeIds: {
@@ -26,7 +25,7 @@ export const SCRAPER_LOCATIONS = [
   },
   { 
     name: 'Suikerterrein', 
-    slug: 'Groningen - Suikerterrein',
+    slug: 'Suikerterrein',
     city: 'Groningen', 
     indoor: false, 
     courtTypeIds: {
@@ -37,7 +36,7 @@ export const SCRAPER_LOCATIONS = [
   // Amsterdam
   { 
     name: 'Kauwgomballenkwartier', 
-    slug: 'Amsterdam - Kauwgomballenkwartier',
+    slug: 'Kauwgomballenkwartier',
     city: 'Amsterdam', 
     indoor: false, 
     courtTypeIds: {
@@ -47,7 +46,7 @@ export const SCRAPER_LOCATIONS = [
   },
   { 
     name: 'Olympiaplein', 
-    slug: 'Amsterdam - Olympiaplein',
+    slug: 'Olympiaplein',
     city: 'Amsterdam', 
     indoor: false, 
     courtTypeIds: {
@@ -57,7 +56,7 @@ export const SCRAPER_LOCATIONS = [
   },
   { 
     name: 'Sloterdijk', 
-    slug: 'Amsterdam - Sloterdijk',
+    slug: 'Sloterdijk',
     city: 'Amsterdam', 
     indoor: false, 
     courtTypeIds: {
@@ -67,7 +66,7 @@ export const SCRAPER_LOCATIONS = [
   },
   { 
     name: 'Zuidoost', 
-    slug: 'Amsterdam - Zuidoost',
+    slug: 'Zuidoost',
     city: 'Amsterdam', 
     indoor: true, 
     courtTypeIds: {
@@ -78,7 +77,7 @@ export const SCRAPER_LOCATIONS = [
   // Utrecht
   { 
     name: 'Vechtsebanen', 
-    slug: 'Utrecht - Vechtsebanen',
+    slug: 'Vechtsebanen',
     city: 'Utrecht', 
     indoor: true, 
     courtTypeIds: {
@@ -88,7 +87,7 @@ export const SCRAPER_LOCATIONS = [
   },
   { 
     name: 'Zeehaenkade', 
-    slug: 'Utrecht - Zeehaenkade',
+    slug: 'Zeehaenkade',
     city: 'Utrecht', 
     indoor: true, 
     courtTypeIds: {
