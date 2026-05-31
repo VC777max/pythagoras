@@ -1706,7 +1706,7 @@ export default function SettingsScreen({ activePlayer, token, onLogout, onRefres
         borderTop: '1px solid rgba(255,255,255,0.05)',
         letterSpacing: '0.5px'
       }}>
-        Padel Matcher App · v1.4.0 (874fdfc)
+        Padel Matcher App · v1.4.1 (78919d2)
       </div>
       
     </div>
