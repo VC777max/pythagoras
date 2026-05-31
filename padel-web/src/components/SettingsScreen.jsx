@@ -231,6 +231,31 @@ export default function SettingsScreen({ activePlayer, token, onLogout, onRefres
   };
   // ────────────────────────────────────────────────────────────────────────
 
+  const handleDeleteAccount = async () => {
+    const confirmation = window.confirm(t('deleteAccountConfirm'));
+    if (!confirmation) return;
+
+    setLoading(true);
+    setErrorMsg('');
+    setSuccessMsg('');
+    try {
+      const response = await fetch(`/api/players/${activePlayer.id}`, {
+        method: 'DELETE',
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (response.ok) {
+        onLogout();
+      } else {
+        const data = await response.json();
+        setErrorMsg(data.error || 'Failed to delete account.');
+      }
+    } catch (e) {
+      console.error(e);
+      setErrorMsg('Failed to delete account.');
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const handleSave = async (e) => {
     e.preventDefault();
@@ -1556,6 +1581,16 @@ export default function SettingsScreen({ activePlayer, token, onLogout, onRefres
           style={{ borderColor: 'var(--color-danger)', color: 'var(--color-danger)' }}
         >
           <LogOut size={14} /> {t('logOut')}
+        </button>
+
+        <button
+          type="button"
+          onClick={handleDeleteAccount}
+          className="btn-secondary"
+          style={{ borderColor: 'var(--color-danger)', background: 'rgba(255, 71, 71, 0.05)', color: 'var(--color-danger)', marginTop: '8px' }}
+          disabled={loading}
+        >
+          <Trash2 size={14} /> {t('deleteAccount')}
         </button>
       </form>
 

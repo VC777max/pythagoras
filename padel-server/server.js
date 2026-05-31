@@ -8,6 +8,7 @@ import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import webpush from 'web-push';
 import { getAvailability, SCRAPER_LOCATIONS } from './peakz-scraper.js';
+import { rateLimit } from 'express-rate-limit';
 
 const app = express();
 app.use(cors());
@@ -164,6 +165,23 @@ function getNextDateForDay(dayName) {
 }
 
 const JWT_SECRET = process.env.JWT_SECRET || 'padel_secret_super_secure_key_1234';
+if (JWT_SECRET === 'padel_secret_super_secure_key_1234') {
+  if (process.env.NODE_ENV === 'production') {
+    console.error('CRITICAL ERROR: JWT_SECRET is using the insecure default fallback in production environment! Exiting.');
+    process.exit(1);
+  } else {
+    console.warn('WARNING: JWT_SECRET is using the insecure default fallback. This is acceptable for development only.');
+  }
+}
+
+// Rate limiter for authentication endpoints (login and register)
+const authLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 15, // Limit each IP to 15 authentication requests per windowMs
+  message: { error: 'Too many authentication attempts. Please try again after 15 minutes.' },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
 
 // Middleware: Verify JWT authorization token and player access permissions
 const authenticateToken = (req, res, next) => {
@@ -196,7 +214,7 @@ const authenticateToken = (req, res, next) => {
 // Players & Login Endpoints
 // ----------------------------------------
 
-app.post('/api/login', (req, res) => {
+app.post('/api/login', authLimiter, (req, res) => {
   const { name, pin } = req.body;
   if (!name || !pin) {
     return res.status(400).json({ error: 'Name and PIN are required' });
@@ -228,7 +246,7 @@ app.post('/api/login', (req, res) => {
   }
 });
 
-app.get('/api/players', (req, res) => {
+app.get('/api/players', authenticateToken, (req, res) => {
   try {
     const players = db.prepare('SELECT id, name, level, position, sessions, hours, wins, games, avail_mode, city, preferred_clubs, elo, elo_peak, avatar, available_now, match_mode, pref_match_type, allow_large_skill_gap, pref_playtime, pref_court_type, pref_court_env FROM players').all();
     players.forEach(p => {
@@ -285,8 +303,8 @@ const registerHandler = (req, res) => {
   }
 };
 
-app.post('/api/players', registerHandler);
-app.post('/api/register', registerHandler);
+app.post('/api/players', authLimiter, registerHandler);
+app.post('/api/register', authLimiter, registerHandler);
 
 // Update player profile/settings
 app.put('/api/players/:id', authenticateToken, (req, res) => {
@@ -747,6 +765,24 @@ app.delete('/api/admin/players/:id', authenticateToken, requireAdmin, (req, res)
 
     db.prepare('DELETE FROM players WHERE id = ?').run(id);
     return res.json({ success: true, message: 'Player deleted successfully' });
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ error: 'Database error' });
+  }
+});
+
+// DELETE own player profile (GDPR Right to be Forgotten)
+app.delete('/api/players/:id', authenticateToken, (req, res) => {
+  const { id } = req.params;
+
+  try {
+    const playerExists = db.prepare('SELECT id FROM players WHERE id = ?').get(id);
+    if (!playerExists) {
+      return res.status(404).json({ error: 'Player not found' });
+    }
+
+    db.prepare('DELETE FROM players WHERE id = ?').run(id);
+    return res.json({ success: true, message: 'Your profile has been deleted successfully' });
   } catch (err) {
     console.error(err);
     return res.status(500).json({ error: 'Database error' });
